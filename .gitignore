@@ -1,0 +1,15 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# Local SQLite Database and Auth Secrets (Do not commit real financial data)
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/.auth_secret
+
