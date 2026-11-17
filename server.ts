@@ -13,7 +13,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const PORT = Number(process.env.PORT) || 3000;
-const IS_PROD = process.env.NODE_ENV === 'production';
+const IS_PROD = process.env.NODE_ENV === 'production' || process.argv.includes('--prod') || process.argv.includes('--preview');
 
 // Persistent secret for HMAC token signing (generated once and stored alongside DB if not in env)
 const DATA_DIR = path.resolve(__dirname, 'data');
@@ -1197,16 +1197,22 @@ async function startServer() {
       appType: 'spa',
     });
     app.use(vite.middlewares);
+    console.log(`[MODO DESENVOLVIMENTO] Vite HMR ativo`);
   } else {
     const distPath = path.resolve(__dirname, 'dist');
+    if (!fs.existsSync(distPath)) {
+      console.error(`\n[ERRO CRÍTICO] Pasta 'dist' não encontrada!\nPor favor, execute 'npm run build' antes de iniciar o modo de produção/preview.\n`);
+      process.exit(1);
+    }
     app.use(express.static(distPath));
     app.get('*', (_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
+    console.log(`[MODO PRODUÇÃO / PWA OFFLINE] Servindo aplicação empacotada de: ${distPath}`);
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`FluxoClaro server listening on http://0.0.0.0:${PORT}`);
+    console.log(`FluxoClaro rodando em: http://localhost:${PORT}`);
   });
 }
 

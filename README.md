@@ -45,13 +45,23 @@ npm install
 ```
 
 ### 3. Executando em Modo Desenvolvimento
-Inicie o servidor integrado (Express + Vite):
+Inicie o servidor integrado com suporte a recarregamento rápido (HMR):
 ```bash
 npm run dev
 ```
+Abra seu navegador em: 👉 **[http://localhost:3000](http://localhost:3000)**
 
-Abra seu navegador em:
-👉 **[http://localhost:3000](http://localhost:3000)**
+### 4. Executando em Modo Produção / PWA Completo (Teste de Offline e F5)
+Para testar a experiência final de PWA com Service Worker e recarregamento 100% offline via F5:
+```bash
+# 1. Compila o frontend e gera os assets do PWA
+npm run build
+
+# 2. Inicia o servidor servindo o bundle compilado + API SQLite
+npm run preview
+# (ou npm start)
+```
+Abra seu navegador em: 👉 **[http://localhost:3000](http://localhost:3000)**
 
 ---
 
