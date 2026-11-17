@@ -1205,7 +1205,12 @@ async function startServer() {
       process.exit(1);
     }
     app.use(express.static(distPath));
-    app.get('*', (_req, res) => {
+    app.get('*', (req, res) => {
+      // Não retorna index.html (text/html) para rotas de API, módulos do Vite ou assets com extensão que não existem
+      if (req.path.startsWith('/api/') || req.path.startsWith('/@') || /\.[a-zA-Z0-9]+$/.test(req.path)) {
+        res.status(404).end();
+        return;
+      }
       res.sendFile(path.join(distPath, 'index.html'));
     });
     console.log(`[MODO PRODUÇÃO / PWA OFFLINE] Servindo aplicação empacotada de: ${distPath}`);
