@@ -17,6 +17,8 @@ import {
   buildInstallmentTransactions,
   buildRecurringTransactions,
   buildDuplicatedTransaction,
+  cleanDocumentDigits,
+  findDuplicateContactDocument,
 } from '../format';
 import type { Transaction } from '../../types';
 
@@ -352,3 +354,56 @@ describe('Recurring and duplicate transactions', () => {
     expect(duplicate.interestCents).toBe(0);
   });
 });
+
+describe('cleanDocumentDigits & findDuplicateContactDocument', () => {
+  it('cleans non-numeric characters from document strings', () => {
+    expect(cleanDocumentDigits('09.812.913/0001-87')).toBe('09812913000187');
+    expect(cleanDocumentDigits('123.456.789-00')).toBe('12345678900');
+    expect(cleanDocumentDigits('   ')).toBe('');
+    expect(cleanDocumentDigits(null)).toBe('');
+  });
+
+  const sampleContacts = [
+    {
+      id: 'c1',
+      name: 'GENUINA COMERCIAL LINENSE DE PECAS',
+      document: '09.812.913/0001-87',
+    },
+    {
+      id: 'c2',
+      name: 'João da Silva',
+      document: '123.456.789-00',
+    },
+  ];
+
+  it('detects duplicate CNPJ with identical formatting', () => {
+    const dup = findDuplicateContactDocument(sampleContacts, '09.812.913/0001-87');
+    expect(dup).not.toBeNull();
+    expect(dup?.id).toBe('c1');
+    expect(dup?.name).toBe('GENUINA COMERCIAL LINENSE DE PECAS');
+  });
+
+  it('detects duplicate CNPJ with raw unmasked numbers', () => {
+    const dup = findDuplicateContactDocument(sampleContacts, '09812913000187');
+    expect(dup).not.toBeNull();
+    expect(dup?.id).toBe('c1');
+  });
+
+  it('detects duplicate CPF regardless of punctuation', () => {
+    const dup = findDuplicateContactDocument(sampleContacts, '12345678900');
+    expect(dup).not.toBeNull();
+    expect(dup?.id).toBe('c2');
+  });
+
+  it('ignores duplicate check when editing the same contact (currentContactId matches)', () => {
+    const dup = findDuplicateContactDocument(sampleContacts, '09.812.913/0001-87', 'c1');
+    expect(dup).toBeNull();
+  });
+
+  it('returns null when document is different or empty', () => {
+    expect(findDuplicateContactDocument(sampleContacts, '11.222.333/0001-44')).toBeNull();
+    expect(findDuplicateContactDocument(sampleContacts, '')).toBeNull();
+    expect(findDuplicateContactDocument(sampleContacts, '12345')).toBeNull(); // Less than 8 digits
+  });
+});
+

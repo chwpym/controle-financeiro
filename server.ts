@@ -691,6 +691,24 @@ app.put('/api/contacts/:id', requireAuth, (req: AuthedRequest, res: Response) =>
   const c = req.body;
   const now = new Date().toISOString();
 
+  // Validate duplicate document (CPF / CNPJ) for the same user
+  const rawDoc = String(c.document || '').trim();
+  const cleanDoc = rawDoc.replace(/\D/g, '');
+  if (cleanDoc && cleanDoc.length >= 8) {
+    const existing = db.prepare(`
+      SELECT id, name, document FROM contacts
+      WHERE user_id = ? AND id != ?
+    `).all(uid, id) as { id: string; name: string; document: string }[];
+
+    const duplicate = existing.find((item) => (item.document || '').replace(/\D/g, '') === cleanDoc);
+    if (duplicate) {
+      res.status(400).json({
+        error: `Este ${c.personType === 'PJ' ? 'CNPJ' : 'CPF'} já está cadastrado para o contato "${duplicate.name}".`,
+      });
+      return;
+    }
+  }
+
   db.prepare(`
     INSERT INTO contacts (
       id, user_id, person_type, kind, name, trade_name, document, email, phone,

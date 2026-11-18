@@ -289,3 +289,27 @@ export function buildDuplicatedTransaction(tx: Transaction, nextDueDate?: string
     updatedAt: now,
   };
 }
+
+export function cleanDocumentDigits(doc: string | null | undefined): string {
+  if (!doc) return '';
+  return doc.replace(/\D/g, '');
+}
+
+export function findDuplicateContactDocument<T extends { id: string; name: string; document?: string }>(
+  contacts: T[],
+  targetDocument: string | null | undefined,
+  currentContactId?: string | null
+): T | null {
+  const targetClean = cleanDocumentDigits(targetDocument);
+  if (!targetClean || targetClean.length < 8) return null;
+
+  for (const c of contacts) {
+    if (currentContactId && c.id === currentContactId) continue;
+    const cClean = cleanDocumentDigits(c.document);
+    if (cClean && cClean === targetClean) {
+      return c;
+    }
+  }
+  return null;
+}
+

@@ -1,15 +1,25 @@
 import React, { useMemo, useState } from 'react';
-import { Building2, Edit2, Eye, Loader2, Search, Trash2, User, X } from 'lucide-react';
-import type { Contact, ContactKind, PersonType, Transaction } from '../types';
+import {
+  Building2,
+  Edit2,
+  Eye,
+  Filter,
+  Phone,
+  Plus,
+  Search,
+  Trash2,
+  User,
+  Users,
+  X,
+} from 'lucide-react';
+import type { Contact, PersonType, Transaction } from '../types';
 import { api, ApiError } from '../utils/api';
 import {
   currentMonthKey,
+  findDuplicateContactDocument,
   formatBRL,
   formatDateBR,
   isOverdue,
-  maskCEP,
-  maskCNPJ,
-  maskCPF,
   todayISO,
 } from '../utils/format';
 import {
@@ -18,6 +28,7 @@ import {
   matchesDateFilter,
   type DateFilterValue,
 } from './DateRangeFilter';
+import { ContactDrawer, type ContactFormData } from './ContactDrawer';
 
 interface ContactsViewProps {
   userId: string;
@@ -29,25 +40,7 @@ interface ContactsViewProps {
   onDeleteContact: (id: string) => void;
 }
 
-interface ContactFormState {
-  id: string | null;
-  personType: PersonType;
-  kind: ContactKind;
-  name: string;
-  tradeName: string;
-  document: string;
-  email: string;
-  phone: string;
-  cep: string;
-  street: string;
-  number: string;
-  complement: string;
-  neighborhood: string;
-  city: string;
-  state: string;
-}
-
-const EMPTY_FORM: ContactFormState = {
+const EMPTY_FORM: ContactFormData = {
   id: null,
   personType: 'PJ',
   kind: 'both',
@@ -65,6 +58,8 @@ const EMPTY_FORM: ContactFormState = {
   state: '',
 };
 
+type QuickFilter = 'ALL' | 'PJ' | 'PF' | 'PENDING';
+
 export const ContactsView: React.FC<ContactsViewProps> = ({
   userId,
   selectedMonth = currentMonthKey(),
@@ -74,9 +69,10 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
   onSaveContact,
   onDeleteContact,
 }) => {
-  const [form, setForm] = useState<ContactFormState>(EMPTY_FORM);
+  const [form, setForm] = useState<ContactFormData>(EMPTY_FORM);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const [filterType, setFilterType] = useState<'ALL' | 'PF' | 'PJ'>('ALL');
+  const [filterType, setFilterType] = useState<QuickFilter>('ALL');
   const [lookupCnpjLoading, setLookupCnpjLoading] = useState(false);
   const [lookupCepLoading, setLookupCepLoading] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: 'error' | 'success'; text: string } | null>(null);
@@ -84,11 +80,6 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
   const [historyDateFilter, setHistoryDateFilter] = useState<DateFilterValue>(() =>
     createDateFilterState(selectedMonth, 'all')
   );
-
-  const openInspectContact = (c: Contact) => {
-    setHistoryDateFilter(createDateFilterState(selectedMonth, 'all'));
-    setInspectContact(c);
-  };
 
   const today = todayISO();
 
@@ -103,10 +94,25 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
     return map;
   }, [transactions]);
 
+  const pjCount = useMemo(() => contacts.filter((c) => c.personType === 'PJ').length, [contacts]);
+  const pfCount = useMemo(() => contacts.filter((c) => c.personType === 'PF').length, [contacts]);
+  const withPendingCount = useMemo(() => {
+    return contacts.filter((c) => {
+      const txs = contactTxMap.get(c.id) || [];
+      return txs.some((t) => t.status === 'pending');
+    }).length;
+  }, [contacts, contactTxMap]);
+
   const filteredContacts = useMemo(() => {
     const q = search.trim().toLowerCase();
     return contacts.filter((c) => {
-      if (filterType !== 'ALL' && c.personType !== filterType) return false;
+      if (filterType === 'PJ' && c.personType !== 'PJ') return false;
+      if (filterType === 'PF' && c.personType !== 'PF') return false;
+      if (filterType === 'PENDING') {
+        const txs = contactTxMap.get(c.id) || [];
+        if (!txs.some((t) => t.status === 'pending')) return false;
+      }
+
       if (!q) return true;
       return (
         c.name.toLowerCase().includes(q) ||
@@ -115,16 +121,38 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
         c.city.toLowerCase().includes(q)
       );
     });
-  }, [contacts, search, filterType]);
+  }, [contacts, search, filterType, contactTxMap]);
 
-  const handleTogglePersonType = (nextType: PersonType) => {
+  const duplicateContact = useMemo(() => {
+    return findDuplicateContactDocument(contacts, form.document, form.id);
+  }, [contacts, form.document, form.id]);
+
+  const handleOpenNew = () => {
+    setForm(EMPTY_FORM);
     setFeedback(null);
-    setForm((prev) => ({
-      ...prev,
-      personType: nextType,
-      document:
-        nextType === 'PF' ? maskCPF(prev.document) : maskCNPJ(prev.document),
-    }));
+    setIsDrawerOpen(true);
+  };
+
+  const handleEdit = (c: Contact) => {
+    setFeedback(null);
+    setForm({
+      id: c.id,
+      personType: c.personType,
+      kind: c.kind,
+      name: c.name,
+      tradeName: c.tradeName || '',
+      document: c.document || '',
+      email: c.email || '',
+      phone: c.phone || '',
+      cep: c.cep || '',
+      street: c.street || '',
+      number: c.number || '',
+      complement: c.complement || '',
+      neighborhood: c.neighborhood || '',
+      city: c.city || '',
+      state: c.state || '',
+    });
+    setIsDrawerOpen(true);
   };
 
   const handleConsultCnpj = async () => {
@@ -132,6 +160,15 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
     const digits = form.document.replace(/\D/g, '');
     if (digits.length !== 14) {
       setFeedback({ kind: 'error', text: 'Informe os 14 dígitos do CNPJ antes de consultar.' });
+      return;
+    }
+
+    const existingDup = findDuplicateContactDocument(contacts, digits, form.id);
+    if (existingDup) {
+      setFeedback({
+        kind: 'error',
+        text: `Atenção: Este CNPJ já pertence ao contato cadastrado "${existingDup.name}".`,
+      });
       return;
     }
 
@@ -214,6 +251,15 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
       return;
     }
 
+    const duplicate = findDuplicateContactDocument(contacts, form.document, form.id);
+    if (duplicate) {
+      setFeedback({
+        kind: 'error',
+        text: `Não é possível salvar: este ${form.personType === 'PJ' ? 'CNPJ' : 'CPF'} já está cadastrado para "${duplicate.name}".`,
+      });
+      return;
+    }
+
     const now = new Date().toISOString();
     const existing = form.id ? contacts.find((c) => c.id === form.id) : undefined;
     const contact: Contact = {
@@ -239,346 +285,133 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
 
     onSaveContact(contact);
     setForm(EMPTY_FORM);
-    setFeedback({ kind: 'success', text: 'Cadastro salvo com sucesso.' });
+    setIsDrawerOpen(false);
+    setFeedback(null);
   };
 
-  const handleEdit = (c: Contact) => {
-    setFeedback(null);
-    setForm({
-      id: c.id,
-      personType: c.personType,
-      kind: c.kind,
-      name: c.name,
-      tradeName: c.tradeName,
-      document: c.document,
-      email: c.email,
-      phone: c.phone,
-      cep: c.cep,
-      street: c.street,
-      number: c.number,
-      complement: c.complement,
-      neighborhood: c.neighborhood,
-      city: c.city,
-      state: c.state,
-    });
+  const openInspectContact = (c: Contact) => {
+    setHistoryDateFilter(createDateFilterState(selectedMonth, 'all'));
+    setInspectContact(c);
   };
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-      {/* Unified PF / PJ Form */}
-      <div className="xl:col-span-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 sm:p-6">
-        <div className="flex items-center justify-between gap-2 mb-4">
-          <div>
-            <h2 className="text-base font-display font-semibold text-slate-900 dark:text-white">
-              {form.id ? 'Editar Cadastro' : 'Cadastro Unificado PF / PJ'}
-            </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Alterne rapidamente entre Pessoa Física e Jurídica
+    <div className="space-y-6">
+      {/* Top Header Card */}
+      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-teal-50 dark:bg-teal-950/60 border border-teal-200/60 dark:border-teal-800/60 flex items-center justify-center text-teal-700 dark:text-teal-400">
+                <Users className="w-5 h-5" />
+              </div>
+              <h1 className="text-xl font-display font-bold text-slate-900 dark:text-white">
+                Cadastros PF / PJ
+              </h1>
+            </div>
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+              Gerencie seus clientes, fornecedores e parceiros de negócio com ficha financeira integrada.
             </p>
           </div>
-          {form.id && (
-            <button
-              type="button"
-              onClick={() => {
-                setForm(EMPTY_FORM);
-                setFeedback(null);
-              }}
-              className="text-xs font-semibold text-teal-700 dark:text-teal-400 hover:underline"
-            >
-              Novo cadastro
-            </button>
-          )}
-        </div>
 
-        {/* Fast PF / PJ Toggle on the exact same screen */}
-        <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl mb-4">
           <button
             type="button"
-            onClick={() => handleTogglePersonType('PJ')}
-            className={`flex items-center justify-center gap-2 py-2 text-xs font-semibold rounded-lg transition-colors min-h-[42px] ${
-              form.personType === 'PJ'
-                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-300'
-            }`}
+            onClick={handleOpenNew}
+            className="px-4 py-2.5 rounded-xl bg-teal-700 text-white text-xs sm:text-sm font-semibold hover:bg-teal-800 transition-colors flex items-center justify-center gap-2 shadow-sm shrink-0 min-h-[42px] cursor-pointer"
           >
-            <Building2 className="w-4 h-4" />
-            Pessoa Jurídica (CNPJ)
-          </button>
-          <button
-            type="button"
-            onClick={() => handleTogglePersonType('PF')}
-            className={`flex items-center justify-center gap-2 py-2 text-xs font-semibold rounded-lg transition-colors min-h-[42px] ${
-              form.personType === 'PF'
-                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-300'
-            }`}
-          >
-            <User className="w-4 h-4" />
-            Pessoa Física (CPF)
+            <Plus className="w-4 h-4" />
+            Novo Contato
           </button>
         </div>
 
-        {feedback && (
-          <div
-            className={`mb-4 rounded-xl border px-3.5 py-2.5 text-xs font-medium ${
-              feedback.kind === 'error'
-                ? 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-900 text-red-700 dark:text-red-300'
-                : 'bg-teal-50 dark:bg-teal-950/40 border-teal-200 dark:border-teal-800 text-teal-800 dark:text-teal-200'
-            }`}
-          >
-            {feedback.text}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-3.5">
-          {/* Document + Consultar button for PJ */}
-          <div>
-            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-              {form.personType === 'PJ' ? 'CNPJ' : 'CPF'}
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={form.document}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    document:
-                      form.personType === 'PJ'
-                        ? maskCNPJ(e.target.value)
-                        : maskCPF(e.target.value),
-                  })
-                }
-                placeholder={form.personType === 'PJ' ? '00.000.000/0001-00' : '000.000.000-00'}
-                className="flex-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm font-mono-tabular min-h-[44px]"
-              />
-              {form.personType === 'PJ' && (
-                <button
-                  type="button"
-                  onClick={handleConsultCnpj}
-                  disabled={lookupCnpjLoading}
-                  className="px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-semibold hover:opacity-90 disabled:opacity-60 inline-flex items-center gap-1.5 whitespace-nowrap min-h-[44px]"
-                >
-                  {lookupCnpjLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  Consultar
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                {form.personType === 'PJ' ? 'Razão Social *' : 'Nome completo *'}
-              </label>
-              <input
-                type="text"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder={form.personType === 'PJ' ? 'Ex: Empresa Exemplo Ltda' : 'Ex: João da Silva'}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm min-h-[44px]"
-              />
-            </div>
-
-            {form.personType === 'PJ' && (
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Nome Fantasia
-                </label>
-                <input
-                  type="text"
-                  value={form.tradeName}
-                  onChange={(e) => setForm({ ...form, tradeName: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm min-h-[44px]"
-                />
-              </div>
-            )}
-
-            <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Relação
-              </label>
-              <select
-                value={form.kind}
-                onChange={(e) => setForm({ ...form, kind: e.target.value as ContactKind })}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm min-h-[44px]"
-              >
-                <option value="both">Cliente e Fornecedor</option>
-                <option value="supplier">Fornecedor (Contas a Pagar)</option>
-                <option value="customer">Cliente (Contas a Receber)</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Telefone
-              </label>
-              <input
-                type="text"
-                value={form.phone}
-                onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                placeholder="(11) 99999-9999"
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm min-h-[44px]"
-              />
-            </div>
-
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                E-mail de contato (opcional)
-              </label>
-              <input
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                placeholder="contato@empresa.com.br"
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm min-h-[44px]"
-              />
-            </div>
-
-            {/* CEP + Consultar */}
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                CEP
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={form.cep}
-                  onChange={(e) => setForm({ ...form, cep: maskCEP(e.target.value) })}
-                  placeholder="00000-000"
-                  className="flex-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm font-mono-tabular min-h-[44px]"
-                />
-                <button
-                  type="button"
-                  onClick={handleConsultCep}
-                  disabled={lookupCepLoading}
-                  className="px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-semibold hover:opacity-90 disabled:opacity-60 inline-flex items-center gap-1.5 whitespace-nowrap min-h-[44px]"
-                >
-                  {lookupCepLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  Consultar
-                </button>
-              </div>
-            </div>
-
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Logradouro / Rua
-              </label>
-              <input
-                type="text"
-                value={form.street}
-                onChange={(e) => setForm({ ...form, street: e.target.value })}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm min-h-[44px]"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Número
-              </label>
-              <input
-                type="text"
-                value={form.number}
-                onChange={(e) => setForm({ ...form, number: e.target.value })}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm min-h-[44px]"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Complemento
-              </label>
-              <input
-                type="text"
-                value={form.complement}
-                onChange={(e) => setForm({ ...form, complement: e.target.value })}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm min-h-[44px]"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Bairro
-              </label>
-              <input
-                type="text"
-                value={form.neighborhood}
-                onChange={(e) => setForm({ ...form, neighborhood: e.target.value })}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm min-h-[44px]"
-              />
-            </div>
-
-            <div className="grid grid-cols-3 gap-2">
-              <div className="col-span-2">
-                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Cidade
-                </label>
-                <input
-                  type="text"
-                  value={form.city}
-                  onChange={(e) => setForm({ ...form, city: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm min-h-[44px]"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  UF
-                </label>
-                <input
-                  type="text"
-                  maxLength={2}
-                  value={form.state}
-                  onChange={(e) => setForm({ ...form, state: e.target.value.toUpperCase() })}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm uppercase min-h-[44px]"
-                />
-              </div>
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            className="w-full py-2.5 px-4 rounded-xl bg-teal-700 text-white text-sm font-semibold hover:bg-teal-800 transition-colors min-h-[44px]"
-          >
-            {form.id ? 'Atualizar cadastro' : 'Salvar cadastro'}
-          </button>
-        </form>
-      </div>
-
-      {/* Contacts List */}
-      <div className="xl:col-span-7 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
-        <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
-          <div className="relative flex-1 min-w-[200px]">
+        {/* Filter and Search Bar */}
+        <div className="mt-5 pt-5 border-t border-slate-100 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          {/* Search Box */}
+          <div className="relative flex-1 max-w-md">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por nome, CPF/CNPJ ou cidade..."
-              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs min-h-[40px]"
+              placeholder="Buscar por razão social, fantasia, CPF/CNPJ ou cidade..."
+              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-950 text-xs min-h-[40px]"
             />
           </div>
 
-          <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
-            {(['ALL', 'PJ', 'PF'] as const).map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setFilterType(t)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-lg min-h-[34px] ${
-                  filterType === t
-                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-300'
-                }`}
-              >
-                {t === 'ALL' ? 'Todos' : t}
-              </button>
-            ))}
+          {/* Quick Filter Pills */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
+            <button
+              type="button"
+              onClick={() => setFilterType('ALL')}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap min-h-[34px] transition-colors cursor-pointer ${
+                filterType === 'ALL'
+                  ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-xs'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900'
+              }`}
+            >
+              Todos ({contacts.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterType('PJ')}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap min-h-[34px] transition-colors cursor-pointer ${
+                filterType === 'PJ'
+                  ? 'bg-teal-700 text-white shadow-xs'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900'
+              }`}
+            >
+              Pessoa Jurídica ({pjCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterType('PF')}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap min-h-[34px] transition-colors cursor-pointer ${
+                filterType === 'PF'
+                  ? 'bg-teal-700 text-white shadow-xs'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900'
+              }`}
+            >
+              Pessoa Física ({pfCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterType('PENDING')}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap min-h-[34px] transition-colors cursor-pointer ${
+                filterType === 'PENDING'
+                  ? 'bg-amber-600 text-white shadow-xs'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900'
+              }`}
+            >
+              Com Pendências ({withPendingCount})
+            </button>
           </div>
         </div>
+      </div>
 
+      {/* Spacious Contacts List / Cards */}
+      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
         {filteredContacts.length === 0 ? (
-          <div className="p-10 text-center text-sm text-slate-500 dark:text-slate-400">
-            Nenhum cliente ou fornecedor encontrado.
+          <div className="p-12 text-center space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto text-slate-400">
+              <Users className="w-6 h-6" />
+            </div>
+            <div className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+              Nenhum contato encontrado
+            </div>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto">
+              {search
+                ? 'Nenhum resultado corresponde aos termos da pesquisa.'
+                : 'Você ainda não cadastrou nenhum cliente ou fornecedor.'}
+            </p>
+            {!search && (
+              <button
+                type="button"
+                onClick={handleOpenNew}
+                className="mt-2 px-4 py-2 rounded-xl bg-teal-700 text-white text-xs font-semibold hover:bg-teal-800 inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Cadastrar primeiro contato
+              </button>
+            )}
           </div>
         ) : (
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -591,66 +424,94 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
               return (
                 <div
                   key={c.id}
-                  className="p-4 sm:px-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/70 dark:hover:bg-slate-800/30 transition-colors"
+                  className="p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-50/70 dark:hover:bg-slate-800/30 transition-colors"
                 >
-                  <div className="min-w-0 space-y-0.5">
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => openInspectContact(c)}
-                        title="Abrir ficha financeira do contato"
-                        className="text-left text-sm font-semibold text-slate-900 dark:text-white hover:text-teal-700 dark:hover:text-teal-400 truncate"
-                      >
-                        {c.name}
-                      </button>
-                      <span className="text-xs font-mono-tabular text-teal-700 dark:text-teal-400 font-semibold shrink-0">
-                        · {c.personType}
-                      </span>
+                  {/* Left Info Column */}
+                  <div className="flex items-start gap-3.5 min-w-0">
+                    <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-300 shrink-0 mt-0.5">
+                      {c.personType === 'PJ' ? <Building2 className="w-5 h-5 text-teal-700 dark:text-teal-400" /> : <User className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />}
                     </div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-2">
-                      {c.tradeName && <span>{c.tradeName}</span>}
-                      {c.document && <span className="font-mono-tabular">{c.document}</span>}
-                      {c.city && (
-                        <span>
-                          · {c.city}
-                          {c.state ? `/${c.state}` : ''}
+
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openInspectContact(c)}
+                          title="Abrir ficha financeira do contato"
+                          className="text-left text-sm sm:text-base font-semibold text-slate-900 dark:text-white hover:text-teal-700 dark:hover:text-teal-400 truncate cursor-pointer"
+                        >
+                          {c.name}
+                        </button>
+
+                        <span className="text-[11px] px-2 py-0.5 rounded-md font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700 font-mono-tabular shrink-0">
+                          {c.personType}
                         </span>
-                      )}
-                      {c.phone && <span className="font-mono-tabular">· {c.phone}</span>}
-                      {linkedTxs.length > 0 && (
-                        <span className="font-mono-tabular text-teal-700 dark:text-teal-400 font-medium">
-                          · {linkedTxs.length} conta(s)
-                          {pendingCents > 0 ? ` (${formatBRL(pendingCents)} em aberto)` : ''}
-                        </span>
-                      )}
+
+                        {c.kind && c.kind !== 'both' && (
+                          <span
+                            className={`text-[10px] px-2 py-0.5 rounded-md font-semibold shrink-0 uppercase ${
+                              c.kind === 'customer'
+                                ? 'bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300'
+                                : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300'
+                            }`}
+                          >
+                            {c.kind === 'customer' ? 'Cliente' : 'Fornecedor'}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="text-xs text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                        {c.tradeName && <span className="text-slate-700 dark:text-slate-300 font-medium">({c.tradeName})</span>}
+                        {c.document && <span className="font-mono-tabular font-medium text-slate-600 dark:text-slate-400">{c.document}</span>}
+                        {c.city && (
+                          <span>
+                            · {c.city}
+                            {c.state ? `/${c.state}` : ''}
+                          </span>
+                        )}
+                        {c.phone && (
+                          <span className="font-mono-tabular inline-flex items-center gap-1">
+                            · <Phone className="w-3 h-3 text-slate-400" /> {c.phone}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => openInspectContact(c)}
-                      className="p-2 rounded-lg text-teal-700 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-950/40 min-h-[40px] min-w-[40px] flex items-center justify-center"
-                      title="Ver ficha financeira e histórico"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleEdit(c)}
-                      className="p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 min-h-[40px] min-w-[40px] flex items-center justify-center"
-                      title="Editar contato"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onDeleteContact(c.id)}
-                      className="p-2 rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 min-h-[40px] min-w-[40px] flex items-center justify-center"
-                      title="Excluir contato"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                  {/* Right Status & Actions Column */}
+                  <div className="flex items-center justify-between md:justify-end gap-3.5 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100 dark:border-slate-800/80">
+                    {/* Financial Badge */}
+                    <div className="text-left md:text-right">
+                      {linkedTtxInfo(linkedTxs.length, pendingCents)}
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => openInspectContact(c)}
+                        className="p-2 rounded-xl text-teal-700 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-950/40 min-h-[38px] min-w-[38px] flex items-center justify-center transition-colors cursor-pointer"
+                        title="Ver ficha financeira e extrato"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleEdit(c)}
+                        className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 min-h-[38px] min-w-[38px] flex items-center justify-center transition-colors cursor-pointer"
+                        title="Editar cadastro (abrir gaveta)"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onDeleteContact(c.id)}
+                        className="p-2 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 min-h-[38px] min-w-[38px] flex items-center justify-center transition-colors cursor-pointer"
+                        title="Excluir contato"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -658,6 +519,23 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
           </div>
         )}
       </div>
+
+      {/* Slide-over Drawer for Create / Edit (Modelo Gaveta ERP) */}
+      <ContactDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        form={form}
+        setForm={setForm}
+        duplicateContact={duplicateContact}
+        onConsultCnpj={handleConsultCnpj}
+        onConsultCep={handleConsultCep}
+        lookupCnpjLoading={lookupCnpjLoading}
+        lookupCepLoading={lookupCepLoading}
+        feedback={feedback}
+        onSubmit={handleSubmit}
+        onDelete={(id) => onDeleteContact(id)}
+        onEditExisting={(existing) => handleEdit(existing)}
+      />
 
       {/* Contact Financial History Modal */}
       {inspectContact && (
@@ -678,7 +556,7 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
                 type="button"
                 onClick={() => setInspectContact(null)}
                 aria-label="Fechar ficha"
-                className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 min-h-[40px] min-w-[40px] flex items-center justify-center"
+                className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 min-h-[40px] min-w-[40px] flex items-center justify-center cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -757,7 +635,7 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
                               <button
                                 type="button"
                                 onClick={() => onOpenConsult(tx)}
-                                className="text-left font-semibold text-slate-900 dark:text-white hover:text-teal-700 dark:hover:text-teal-400"
+                                className="text-left font-semibold text-slate-900 dark:text-white hover:text-teal-700 dark:hover:text-teal-400 cursor-pointer"
                               >
                                 {tx.description}
                               </button>
@@ -798,7 +676,7 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
                                 type="button"
                                 onClick={() => onOpenConsult(tx)}
                                 title="Consultar e gerar recibo PDF"
-                                className="p-1.5 rounded-lg text-teal-700 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-950/40"
+                                className="p-1.5 rounded-lg text-teal-700 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-950/40 cursor-pointer"
                               >
                                 <Eye className="w-4 h-4" />
                               </button>
@@ -817,3 +695,37 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
     </div>
   );
 };
+
+function linkedTtxInfo(count: number, pendingCents: number) {
+  if (count === 0) {
+    return (
+      <span className="text-xs text-slate-400 dark:text-slate-500">
+        Nenhuma conta vinculada
+      </span>
+    );
+  }
+
+  if (pendingCents > 0) {
+    return (
+      <div>
+        <div className="text-xs font-mono-tabular font-bold text-amber-600 dark:text-amber-400">
+          {formatBRL(pendingCents)}
+        </div>
+        <div className="text-[11px] text-slate-500">
+          {count} conta(s) ({formatBRL(pendingCents)} em aberto)
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+        Contas em dia
+      </div>
+      <div className="text-[11px] text-slate-500">
+        {count} conta(s) liquidada(s)
+      </div>
+    </div>
+  );
+}
