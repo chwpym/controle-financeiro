@@ -19,6 +19,8 @@ import {
   buildDuplicatedTransaction,
   cleanDocumentDigits,
   findDuplicateContactDocument,
+  calculateSettlement,
+  calculateSettledAmount,
 } from '../format';
 import type { Transaction } from '../../types';
 
@@ -106,6 +108,7 @@ describe('Date manipulation and formatting', () => {
       categoryId: null,
       contactId: null,
       documentNumber: '',
+      issueDate: null,
       installmentGroupId: null,
       installmentNumber: 1,
       installmentTotal: 1,
@@ -257,7 +260,7 @@ describe('Installment calculation & division logic', () => {
     expect(list[1].paidAt).toBeNull();
   });
 
-  it('clamps installments between 1 and 60', () => {
+  it('clamps installments between 1 and 420', () => {
     const listOver = buildInstallmentTransactions({
       userId: 'u1',
       type: 'payable',
@@ -265,13 +268,13 @@ describe('Installment calculation & division logic', () => {
       amountCents: 60000,
       amountMode: 'per_installment',
       firstDueDate: '2026-11-16',
-      installments: 100,
+      installments: 500,
       categoryId: null,
       contactId: null,
       documentNumber: '',
       notes: '',
     });
-    expect(listOver).toHaveLength(60);
+    expect(listOver).toHaveLength(420);
 
     const listZero = buildInstallmentTransactions({
       userId: 'u1',
@@ -287,6 +290,129 @@ describe('Installment calculation & division logic', () => {
       notes: '',
     });
     expect(listZero).toHaveLength(1);
+  });
+
+  it('handles long-term installments (120x, 360x, 420x) with exact cent sum and due dates', () => {
+    const scenarios = [
+      { count: 120, totalCents: 10_000_000, expectedLastDueDate: '2036-11-10' }, // R$ 100.000,00 em 120x
+      { count: 360, totalCents: 50_000_000, expectedLastDueDate: '2056-11-10' }, // R$ 500.000,00 em 360x
+      { count: 420, totalCents: 63_000_007, expectedLastDueDate: '2061-11-10' }, // R$ 630.000,07 em 420x
+    ];
+
+    for (const { count, totalCents, expectedLastDueDate } of scenarios) {
+      const list = buildInstallmentTransactions({
+        userId: 'u1',
+        type: 'payable',
+        description: `Financiamento ${count}x`,
+        amountCents: totalCents,
+        amountMode: 'total',
+        firstDueDate: '2026-12-10',
+        installments: count,
+        categoryId: null,
+        contactId: null,
+        documentNumber: `CTR-${count}`,
+        notes: '',
+      });
+
+      expect(list).toHaveLength(count);
+      expect(list.reduce((sum, item) => sum + item.amountCents, 0)).toBe(totalCents);
+
+      const expectedBase = Math.floor(totalCents / count);
+      const expectedRemainder = totalCents % count;
+      expect(list[0].amountCents).toBe(expectedBase + expectedRemainder);
+      for (let i = 1; i < list.length; i++) {
+        expect(list[i].amountCents).toBe(expectedBase);
+      }
+
+      const last = list[list.length - 1];
+      expect(last.installmentNumber).toBe(count);
+      expect(last.installmentTotal).toBe(count);
+      expect(last.dueDate).toBe(expectedLastDueDate);
+      expect(last.description).toBe(`Financiamento ${count}x (${count}/${count})`);
+    }
+  });
+
+  it('correctly divides odd cent amounts placing extra cents on the first installment', () => {
+    const splitFive = buildInstallmentTransactions({
+      userId: 'u1',
+      type: 'payable',
+      description: 'Taxa Mínima',
+      amountCents: 5, // R$ 0,05 em 2x -> 0,03 + 0,02
+      amountMode: 'total',
+      firstDueDate: '2026-11-16',
+      installments: 2,
+      categoryId: null,
+      contactId: null,
+      documentNumber: '',
+      notes: '',
+    });
+    expect(splitFive.map((t) => t.amountCents)).toEqual([3, 2]);
+    expect(splitFive.reduce((sum, t) => sum + t.amountCents, 0)).toBe(5);
+
+    const splitSeven = buildInstallmentTransactions({
+      userId: 'u1',
+      type: 'payable',
+      description: 'Divisão 7 centavos',
+      amountCents: 7, // R$ 0,07 em 3x -> 0,03 + 0,02 + 0,02
+      amountMode: 'total',
+      firstDueDate: '2026-11-16',
+      installments: 3,
+      categoryId: null,
+      contactId: null,
+      documentNumber: '',
+      notes: '',
+    });
+    expect(splitSeven.map((t) => t.amountCents)).toEqual([3, 2, 2]);
+    expect(splitSeven.reduce((sum, t) => sum + t.amountCents, 0)).toBe(7);
+
+    const splitOneOhOne = buildInstallmentTransactions({
+      userId: 'u1',
+      type: 'receivable',
+      description: 'Parcela Ímpar',
+      amountCents: 101, // R$ 1,01 em 2x -> 0,51 + 0,50
+      amountMode: 'total',
+      firstDueDate: '2026-11-16',
+      installments: 2,
+      categoryId: null,
+      contactId: null,
+      documentNumber: '',
+      notes: '',
+    });
+    expect(splitOneOhOne.map((t) => t.amountCents)).toEqual([51, 50]);
+    expect(splitOneOhOne.reduce((sum, t) => sum + t.amountCents, 0)).toBe(101);
+  });
+
+  it('preserves exact total sum across all installment counts from 1x to 60x', () => {
+    const sampleTotals = [65, 10000, 99999, 123457];
+
+    for (const totalCents of sampleTotals) {
+      for (let installments = 1; installments <= 60; installments++) {
+        const list = buildInstallmentTransactions({
+          userId: 'u1',
+          type: 'payable',
+          description: 'Teste Carnê',
+          amountCents: totalCents,
+          amountMode: 'total',
+          firstDueDate: '2026-11-16',
+          installments,
+          categoryId: null,
+          contactId: null,
+          documentNumber: '',
+          notes: '',
+        });
+
+        expect(list).toHaveLength(installments);
+        const sum = list.reduce((acc, tx) => acc + tx.amountCents, 0);
+        expect(sum).toBe(totalCents);
+
+        const expectedBase = Math.floor(totalCents / installments);
+        const expectedRemainder = totalCents % installments;
+        expect(list[0].amountCents).toBe(expectedBase + expectedRemainder);
+        for (let i = 1; i < list.length; i++) {
+          expect(list[i].amountCents).toBe(expectedBase);
+        }
+      }
+    }
   });
 });
 
@@ -330,6 +456,7 @@ describe('Recurring and duplicate transactions', () => {
       categoryId: 'cat-rent',
       contactId: 'landlord-1',
       documentNumber: 'REC-11',
+      issueDate: '2026-10-28',
       installmentGroupId: 'grp-1',
       installmentNumber: 1,
       installmentTotal: 1,
@@ -348,10 +475,54 @@ describe('Recurring and duplicate transactions', () => {
     expect(duplicate.paidAt).toBeNull();
     expect(duplicate.paymentMethod).toBe('');
     expect(duplicate.dueDate).toBe('2026-12-05');
+    expect(duplicate.issueDate).toBe('2026-10-28');
     // Base amount calculation: amount (200000) + discount (5000) - interest (1000) = 204000
     expect(duplicate.amountCents).toBe(204000);
     expect(duplicate.discountCents).toBe(0);
     expect(duplicate.interestCents).toBe(0);
+  });
+
+  it('propagates issueDate across installments and defaults to null when omitted', () => {
+    const withIssueDate = buildInstallmentTransactions({
+      userId: 'u1',
+      type: 'payable',
+      description: 'Compra NF',
+      amountCents: 30000,
+      amountMode: 'total',
+      firstDueDate: '2026-12-05',
+      installments: 3,
+      categoryId: null,
+      contactId: null,
+      documentNumber: 'NF-500',
+      issueDate: '2026-11-18',
+      notes: '',
+    });
+
+    expect(withIssueDate).toHaveLength(3);
+    withIssueDate.forEach((tx) => {
+      expect(tx.issueDate).toBe('2026-11-18');
+    });
+
+    const withoutIssueDate = buildInstallmentTransactions({
+      userId: 'u1',
+      type: 'receivable',
+      description: 'Sem Emissão',
+      amountCents: 10000,
+      amountMode: 'total',
+      firstDueDate: '2026-12-05',
+      installments: 2,
+      categoryId: null,
+      contactId: null,
+      documentNumber: '',
+      notes: '',
+    });
+
+    withoutIssueDate.forEach((tx) => {
+      expect(tx.issueDate).toBeNull();
+    });
+
+    const duplicatedWithoutIssue = buildDuplicatedTransaction(withoutIssueDate[0]);
+    expect(duplicatedWithoutIssue.issueDate).toBeNull();
   });
 });
 
@@ -406,4 +577,49 @@ describe('cleanDocumentDigits & findDuplicateContactDocument', () => {
     expect(findDuplicateContactDocument(sampleContacts, '12345')).toBeNull(); // Less than 8 digits
   });
 });
+
+describe('Settlement calculation with interest and discount', () => {
+  it('calculates final settled amount as base + interest - discount', () => {
+    expect(calculateSettledAmount(10000, 500, 200)).toBe(10300);
+    expect(calculateSettledAmount(10000, 750, 0)).toBe(10750);
+    expect(calculateSettledAmount(10000, 0, 1500)).toBe(8500);
+    expect(calculateSettledAmount(10000)).toBe(10000);
+
+    const detail = calculateSettlement({
+      baseAmountCents: 25000,
+      interestCents: 1250,
+      discountCents: 500,
+    });
+    expect(detail).toEqual({
+      baseAmountCents: 25000,
+      interestCents: 1250,
+      discountCents: 500,
+      finalAmountCents: 25750,
+      isValid: true,
+    });
+  });
+
+  it('allows discount up to the base amount while preserving interest', () => {
+    expect(calculateSettledAmount(10000, 0, 10000)).toBe(0);
+    expect(calculateSettledAmount(10000, 500, 10000)).toBe(500);
+  });
+
+  it('blocks discount greater than the title base amount', () => {
+    const invalid = calculateSettlement({
+      baseAmountCents: 10000,
+      interestCents: 0,
+      discountCents: 10001,
+    });
+    expect(invalid.isValid).toBe(false);
+    expect(invalid.error).toMatch(/desconto não pode ser maior/i);
+
+    expect(() => calculateSettledAmount(10000, 0, 15000)).toThrow(
+      /desconto não pode ser maior/i
+    );
+    expect(() => calculateSettledAmount(10000, 5000, 10001)).toThrow(
+      /desconto não pode ser maior/i
+    );
+  });
+});
+
 

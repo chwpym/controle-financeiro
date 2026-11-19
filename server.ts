@@ -99,6 +99,7 @@ db.exec(`
     category_id TEXT,
     contact_id TEXT,
     document_number TEXT NOT NULL DEFAULT '',
+    issue_date TEXT,
     installment_group_id TEXT,
     installment_number INTEGER NOT NULL DEFAULT 1,
     installment_total INTEGER NOT NULL DEFAULT 1,
@@ -133,6 +134,9 @@ if (!txColumns.some((col) => col.name === 'is_recurring')) {
 }
 if (!txColumns.some((col) => col.name === 'recurrence_interval')) {
   db.exec('ALTER TABLE transactions ADD COLUMN recurrence_interval TEXT');
+}
+if (!txColumns.some((col) => col.name === 'issue_date')) {
+  db.exec('ALTER TABLE transactions ADD COLUMN issue_date TEXT');
 }
 
 // Password hashing helpers (scrypt)
@@ -479,6 +483,7 @@ app.get('/api/data/snapshot', requireAuth, (req: AuthedRequest, res: Response) =
       discount_cents as discountCents, interest_cents as interestCents,
       due_date as dueDate, paid_at as paidAt, status, payment_method as paymentMethod,
       category_id as categoryId, contact_id as contactId, document_number as documentNumber,
+      issue_date as issueDate,
       installment_group_id as installmentGroupId, installment_number as installmentNumber,
       installment_total as installmentTotal, is_recurring as isRecurring,
       recurrence_interval as recurrenceInterval, notes, source,
@@ -490,6 +495,7 @@ app.get('/api/data/snapshot', requireAuth, (req: AuthedRequest, res: Response) =
     ...row,
     discountCents: Number(row.discountCents || 0),
     interestCents: Number(row.interestCents || 0),
+    issueDate: (row.issueDate as string) || null,
     isRecurring: Boolean(row.isRecurring),
     recurrenceInterval: row.recurrenceInterval || null,
   }));
@@ -515,10 +521,10 @@ app.post('/api/transactions/batch', requireAuth, (req: AuthedRequest, res: Respo
     INSERT INTO transactions (
       id, user_id, type, description, amount_cents, discount_cents, interest_cents,
       due_date, paid_at, status, payment_method,
-      category_id, contact_id, document_number, installment_group_id,
+      category_id, contact_id, document_number, issue_date, installment_group_id,
       installment_number, installment_total, is_recurring, recurrence_interval,
       notes, source, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       type = excluded.type,
       description = excluded.description,
@@ -532,6 +538,7 @@ app.post('/api/transactions/batch', requireAuth, (req: AuthedRequest, res: Respo
       category_id = excluded.category_id,
       contact_id = excluded.contact_id,
       document_number = excluded.document_number,
+      issue_date = excluded.issue_date,
       installment_group_id = excluded.installment_group_id,
       installment_number = excluded.installment_number,
       installment_total = excluded.installment_total,
@@ -566,7 +573,8 @@ app.post('/api/transactions/batch', requireAuth, (req: AuthedRequest, res: Respo
         item.status === 'settled' ? String(item.paymentMethod || '').slice(0, 60) : '',
         item.categoryId ? String(item.categoryId) : null,
         item.contactId ? String(item.contactId) : null,
-        String(item.documentNumber || '').slice(0, 60),
+        String(item.documentNumber || '').slice(0, 240),
+        item.issueDate ? String(item.issueDate).slice(0, 10) : null,
         item.installmentGroupId ? String(item.installmentGroupId) : null,
         Math.max(1, Number(item.installmentNumber) || 1),
         Math.max(1, Number(item.installmentTotal) || 1),
@@ -600,10 +608,10 @@ app.put('/api/transactions/:id', requireAuth, (req: AuthedRequest, res: Response
     INSERT INTO transactions (
       id, user_id, type, description, amount_cents, discount_cents, interest_cents,
       due_date, paid_at, status, payment_method,
-      category_id, contact_id, document_number, installment_group_id,
+      category_id, contact_id, document_number, issue_date, installment_group_id,
       installment_number, installment_total, is_recurring, recurrence_interval,
       notes, source, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       type = excluded.type,
       description = excluded.description,
@@ -617,6 +625,7 @@ app.put('/api/transactions/:id', requireAuth, (req: AuthedRequest, res: Response
       category_id = excluded.category_id,
       contact_id = excluded.contact_id,
       document_number = excluded.document_number,
+      issue_date = excluded.issue_date,
       installment_group_id = excluded.installment_group_id,
       installment_number = excluded.installment_number,
       installment_total = excluded.installment_total,
@@ -639,7 +648,8 @@ app.put('/api/transactions/:id', requireAuth, (req: AuthedRequest, res: Response
     item.status === 'settled' ? String(item.paymentMethod || '').slice(0, 60) : '',
     item.categoryId ? String(item.categoryId) : null,
     item.contactId ? String(item.contactId) : null,
-    String(item.documentNumber || '').slice(0, 60),
+    String(item.documentNumber || '').slice(0, 240),
+    item.issueDate ? String(item.issueDate).slice(0, 10) : null,
     item.installmentGroupId ? String(item.installmentGroupId) : null,
     Math.max(1, Number(item.installmentNumber) || 1),
     Math.max(1, Number(item.installmentTotal) || 1),
@@ -856,10 +866,10 @@ app.post('/api/backup/restore', requireAuth, (req: AuthedRequest, res: Response)
       INSERT OR REPLACE INTO transactions (
         id, user_id, type, description, amount_cents, discount_cents, interest_cents,
         due_date, paid_at, status, payment_method,
-        category_id, contact_id, document_number, installment_group_id,
+        category_id, contact_id, document_number, issue_date, installment_group_id,
         installment_number, installment_total, is_recurring, recurrence_interval,
         notes, source, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     for (const t of payload.transactions) {
       const recInterval =
@@ -883,6 +893,7 @@ app.post('/api/backup/restore', requireAuth, (req: AuthedRequest, res: Response)
         t.categoryId ? String(t.categoryId) : null,
         t.contactId ? String(t.contactId) : null,
         String(t.documentNumber || ''),
+        t.issueDate ? String(t.issueDate).slice(0, 10) : null,
         t.installmentGroupId ? String(t.installmentGroupId) : null,
         Math.max(1, Number(t.installmentNumber) || 1),
         Math.max(1, Number(t.installmentTotal) || 1),

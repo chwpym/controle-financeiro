@@ -67,6 +67,7 @@ import {
 const THEME_KEY = 'fluxoclaro_theme';
 const LEAD_DAYS_KEY = 'fluxoclaro_notify_days';
 const NOTIFY_ENABLED_KEY = 'fluxoclaro_notify_enabled';
+const SIDEBAR_COLLAPSED_KEY = 'sidebar_collapsed';
 
 export default function App() {
   const isOnline = useOnlineStatus();
@@ -76,6 +77,14 @@ export default function App() {
       return localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : 'light';
     } catch {
       return 'light';
+    }
+  });
+
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true';
+    } catch {
+      return false;
     }
   });
 
@@ -157,6 +166,18 @@ export default function App() {
   }, [theme]);
 
   const toggleTheme = () => setTheme((t) => (t === 'light' ? 'dark' : 'light'));
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
 
   const handleChangeNotifyLeadDays = (days: number) => {
     const sanitized = Number.isFinite(days) ? Math.min(90, Math.max(0, Math.trunc(days))) : 3;
@@ -707,12 +728,40 @@ export default function App() {
   return (
     <div className="min-h-screen flex bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex lg:w-64 lg:flex-col lg:fixed lg:inset-y-0 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-        <div className="h-16 px-5 flex items-center gap-2.5 border-b border-slate-200 dark:border-slate-800">
-          <div className="w-8 h-8 rounded-lg bg-teal-700 text-white flex items-center justify-center font-display font-bold text-sm">
-            FC
+      <aside
+        className={`hidden lg:flex ${
+          sidebarCollapsed ? 'lg:w-20' : 'lg:w-64'
+        } lg:flex-col lg:fixed lg:inset-y-0 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 transition-[width] duration-200`}
+      >
+        <div
+          className={`h-16 flex items-center border-b border-slate-200 dark:border-slate-800 ${
+            sidebarCollapsed ? 'justify-center px-2 gap-1' : 'justify-between px-4'
+          }`}
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-teal-700 text-white flex items-center justify-center font-display font-bold text-sm shrink-0">
+              FC
+            </div>
+            {!sidebarCollapsed && (
+              <span className="font-display font-bold text-lg tracking-tight truncate">
+                FluxoClaro
+              </span>
+            )}
           </div>
-          <span className="font-display font-bold text-lg tracking-tight">FluxoClaro</span>
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            title={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+            aria-label={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+            aria-expanded={!sidebarCollapsed}
+            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+          >
+            {sidebarCollapsed ? (
+              <ChevronRight className="w-4 h-4" />
+            ) : (
+              <ChevronLeft className="w-4 h-4" />
+            )}
+          </button>
         </div>
 
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
@@ -723,55 +772,97 @@ export default function App() {
               <button
                 key={item.id}
                 type="button"
+                title={sidebarCollapsed ? item.label : undefined}
+                aria-label={item.label}
                 onClick={() => {
                   if (item.id === 'transactions') setTxInitialFilter('all');
                   setActiveView(item.id);
                 }}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors min-h-[44px] ${
+                className={`w-full flex items-center ${
+                  sidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3.5'
+                } py-2.5 rounded-xl text-sm font-medium transition-colors min-h-[44px] cursor-pointer ${
                   active
                     ? 'bg-teal-50 dark:bg-teal-950/50 text-teal-800 dark:text-teal-300 font-semibold'
                     : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
                 }`}
               >
                 <Icon className="w-4 h-4 shrink-0" />
-                <span className="truncate">{item.label}</span>
+                {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
               </button>
             );
           })}
         </nav>
 
-        <div className="p-4 border-t border-slate-200 dark:border-slate-800 space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <div className="text-xs font-semibold text-slate-900 dark:text-white truncate">
-                {user.displayName}
+        <div
+          className={`border-t border-slate-200 dark:border-slate-800 ${
+            sidebarCollapsed ? 'p-3 space-y-2 flex flex-col items-center' : 'p-4 space-y-3'
+          }`}
+        >
+          {sidebarCollapsed ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setChangePassOpen(true)}
+                title={`Alterar minha senha (${user.displayName})`}
+                aria-label="Alterar minha senha"
+                className="w-10 h-10 flex items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                <KeyRound className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={handleLogout}
+                title="Sair"
+                aria-label="Sair"
+                className="w-10 h-10 flex items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-slate-900 dark:text-white truncate">
+                    {user.displayName}
+                  </div>
+                  <div className="text-[11px] font-mono-tabular text-slate-500 dark:text-slate-400 truncate">
+                    @{user.username} ·{' '}
+                    {user.role === 'master'
+                      ? 'Master'
+                      : user.role === 'admin'
+                        ? 'Admin'
+                        : 'Usuário'}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setChangePassOpen(true)}
+                  title="Alterar minha senha"
+                  className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  <KeyRound className="w-4 h-4" />
+                </button>
               </div>
-              <div className="text-[11px] font-mono-tabular text-slate-500 dark:text-slate-400 truncate">
-                @{user.username} · {user.role === 'master' ? 'Master' : user.role === 'admin' ? 'Admin' : 'Usuário'}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setChangePassOpen(true)}
-              title="Alterar minha senha"
-              className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
-            >
-              <KeyRound className="w-4 h-4" />
-            </button>
-          </div>
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 min-h-[40px]"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            Sair
-          </button>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 min-h-[40px] cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                Sair
+              </button>
+            </>
+          )}
         </div>
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 lg:pl-64 flex flex-col min-w-0">
+      <div
+        className={`flex-1 ${
+          sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'
+        } flex flex-col min-w-0 transition-[padding] duration-200`}
+      >
         {/* Top Bar (Compact 56px on mobile, 64px on desktop) */}
         <header className="sticky top-0 z-30 h-14 sm:h-16 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">

@@ -3,32 +3,22 @@ import {
   Building2,
   Edit2,
   Eye,
-  Filter,
   Phone,
   Plus,
-  Search,
   Trash2,
   User,
   Users,
-  X,
 } from 'lucide-react';
-import type { Contact, PersonType, Transaction } from '../types';
+import type { Contact, Transaction } from '../types';
 import { api, ApiError } from '../utils/api';
 import {
   currentMonthKey,
   findDuplicateContactDocument,
   formatBRL,
-  formatDateBR,
-  isOverdue,
-  todayISO,
 } from '../utils/format';
-import {
-  createDateFilterState,
-  DateRangeFilter,
-  matchesDateFilter,
-  type DateFilterValue,
-} from './DateRangeFilter';
+import { SearchBar } from './common/SearchBar';
 import { ContactDrawer, type ContactFormData } from './ContactDrawer';
+import { ContactHistoryModal } from './ContactHistoryModal';
 
 interface ContactsViewProps {
   userId: string;
@@ -77,11 +67,6 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
   const [lookupCepLoading, setLookupCepLoading] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: 'error' | 'success'; text: string } | null>(null);
   const [inspectContact, setInspectContact] = useState<Contact | null>(null);
-  const [historyDateFilter, setHistoryDateFilter] = useState<DateFilterValue>(() =>
-    createDateFilterState(selectedMonth, 'all')
-  );
-
-  const today = todayISO();
 
   const contactTxMap = useMemo(() => {
     const map = new Map<string, Transaction[]>();
@@ -290,7 +275,6 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
   };
 
   const openInspectContact = (c: Contact) => {
-    setHistoryDateFilter(createDateFilterState(selectedMonth, 'all'));
     setInspectContact(c);
   };
 
@@ -326,16 +310,14 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
         {/* Filter and Search Bar */}
         <div className="mt-5 pt-5 border-t border-slate-100 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
           {/* Search Box */}
-          <div className="relative flex-1 max-w-md">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por razão social, fantasia, CPF/CNPJ ou cidade..."
-              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-950 text-xs min-h-[40px]"
-            />
-          </div>
+          <SearchBar
+            value={search}
+            onChange={setSearch}
+            placeholder="Buscar por razão social, fantasia, CPF/CNPJ ou cidade..."
+            aria-label="Buscar contatos"
+            containerClassName="flex-1 max-w-md"
+            className="text-xs"
+          />
 
           {/* Quick Filter Pills */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
@@ -538,160 +520,14 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
       />
 
       {/* Contact Financial History Modal */}
-      {inspectContact && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-xs p-0 sm:p-4">
-          <div className="w-full sm:max-w-2xl max-h-[90vh] flex flex-col rounded-t-2xl sm:rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
-              <div className="min-w-0">
-                <h3 className="text-base font-display font-semibold text-slate-900 dark:text-white truncate">
-                  Ficha Financeira — {inspectContact.name}
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-mono-tabular">
-                  {inspectContact.personType}
-                  {inspectContact.document ? ` · ${inspectContact.document}` : ''}
-                  {inspectContact.city ? ` · ${inspectContact.city}/${inspectContact.state}` : ''}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setInspectContact(null)}
-                aria-label="Fechar ficha"
-                className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 min-h-[40px] min-w-[40px] flex items-center justify-center cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {(() => {
-              const allHistory = contactTxMap.get(inspectContact.id) || [];
-              const history = allHistory
-                .filter((tx) => matchesDateFilter(tx, historyDateFilter, selectedMonth))
-                .slice()
-                .sort((a, b) => b.dueDate.localeCompare(a.dueDate));
-              const settledCents = history
-                .filter((t) => t.status === 'settled')
-                .reduce((s, t) => s + t.amountCents, 0);
-              const pendingCents = history
-                .filter((t) => t.status === 'pending')
-                .reduce((s, t) => s + t.amountCents, 0);
-              const overdueCents = history
-                .filter((t) => isOverdue(t, today))
-                .reduce((s, t) => s + t.amountCents, 0);
-
-              return (
-                <div className="p-6 space-y-4 overflow-y-auto">
-                  <DateRangeFilter
-                    value={historyDateFilter}
-                    onChange={setHistoryDateFilter}
-                    selectedMonth={selectedMonth}
-                    modes={['all', 'month', 'year', 'custom']}
-                    showDateFieldSelector
-                    compact
-                  />
-
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3">
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                        Liquidado
-                      </div>
-                      <div className="mt-1 text-sm sm:text-base font-mono-tabular font-bold text-emerald-700 dark:text-emerald-400">
-                        {formatBRL(settledCents)}
-                      </div>
-                    </div>
-                    <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3">
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                        Em aberto
-                      </div>
-                      <div className="mt-1 text-sm sm:text-base font-mono-tabular font-bold text-slate-900 dark:text-white">
-                        {formatBRL(pendingCents)}
-                      </div>
-                    </div>
-                    <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3">
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                        Vencido
-                      </div>
-                      <div className="mt-1 text-sm sm:text-base font-mono-tabular font-bold text-red-600 dark:text-red-400">
-                        {formatBRL(overdueCents)}
-                      </div>
-                    </div>
-                  </div>
-
-                  {history.length === 0 ? (
-                    <div className="py-8 text-center text-xs text-slate-500 dark:text-slate-400">
-                      {allHistory.length === 0
-                        ? 'Nenhuma conta a pagar ou receber vinculada a este contato ainda.'
-                        : 'Nenhuma conta vinculada encontrada para o período selecionado.'}
-                    </div>
-                  ) : (
-                    <div className="rounded-xl border border-slate-200 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800">
-                      {history.map((tx) => {
-                        const overdue = isOverdue(tx, today);
-                        return (
-                          <div
-                            key={tx.id}
-                            className="p-3.5 flex items-center justify-between gap-3 text-xs"
-                          >
-                            <div className="min-w-0">
-                              <button
-                                type="button"
-                                onClick={() => onOpenConsult(tx)}
-                                className="text-left font-semibold text-slate-900 dark:text-white hover:text-teal-700 dark:hover:text-teal-400 cursor-pointer"
-                              >
-                                {tx.description}
-                              </button>
-                              <div className="text-slate-500 dark:text-slate-400 font-mono-tabular mt-0.5">
-                                Venc. {formatDateBR(tx.dueDate)} ·{' '}
-                                {tx.type === 'receivable' ? 'A Receber' : 'A Pagar'} ·{' '}
-                                <span
-                                  className={
-                                    tx.status === 'settled'
-                                      ? 'text-emerald-700 dark:text-emerald-400 font-semibold'
-                                      : overdue
-                                        ? 'text-red-600 dark:text-red-400 font-semibold'
-                                        : 'text-amber-600 dark:text-amber-400 font-semibold'
-                                  }
-                                >
-                                  {tx.status === 'settled'
-                                    ? tx.type === 'receivable'
-                                      ? 'Recebido'
-                                      : 'Pago'
-                                    : overdue
-                                      ? 'Vencido'
-                                      : 'Pendente'}
-                                </span>
-                                {tx.paymentMethod ? ` (${tx.paymentMethod})` : ''}
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <span
-                                className={`font-mono-tabular font-bold ${
-                                  tx.type === 'receivable'
-                                    ? 'text-emerald-700 dark:text-emerald-400'
-                                    : 'text-rose-700 dark:text-rose-400'
-                                }`}
-                              >
-                                {formatBRL(tx.amountCents)}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => onOpenConsult(tx)}
-                                title="Consultar e gerar recibo PDF"
-                                className="p-1.5 rounded-lg text-teal-700 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-950/40 cursor-pointer"
-                              >
-                                <Eye className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-          </div>
-        </div>
-      )}
+      <ContactHistoryModal
+        contact={inspectContact}
+        isOpen={Boolean(inspectContact)}
+        onClose={() => setInspectContact(null)}
+        transactions={contactTxMap.get(inspectContact?.id || '') || []}
+        selectedMonth={selectedMonth}
+        onOpenConsult={onOpenConsult}
+      />
     </div>
   );
 };

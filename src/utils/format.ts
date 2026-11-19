@@ -142,6 +142,9 @@ export const PAYMENT_METHODS = [
   'Outro',
 ] as const;
 
+export const MAX_INSTALLMENTS = 420;
+export const QUICK_INSTALLMENT_PRESETS = [1, 2, 3, 6, 10, 12, 24, 36, 60, 120] as const;
+
 export interface InstallmentBuildParams {
   userId: string;
   type: TransactionType;
@@ -153,13 +156,14 @@ export interface InstallmentBuildParams {
   categoryId: string | null;
   contactId: string | null;
   documentNumber: string;
+  issueDate?: string | null;
   notes: string;
   markFirstSettled?: boolean;
   paymentMethod?: string;
 }
 
 export function buildInstallmentTransactions(params: InstallmentBuildParams): Transaction[] {
-  const count = Math.max(1, Math.min(60, Math.floor(params.installments || 1)));
+  const count = Math.max(1, Math.min(MAX_INSTALLMENTS, Math.floor(params.installments || 1)));
   const now = new Date().toISOString();
   const groupId = count > 1 ? crypto.randomUUID() : null;
 
@@ -196,6 +200,7 @@ export function buildInstallmentTransactions(params: InstallmentBuildParams): Tr
       categoryId: params.categoryId || null,
       contactId: params.contactId || null,
       documentNumber: params.documentNumber.trim(),
+      issueDate: params.issueDate || null,
       installmentGroupId: groupId,
       installmentNumber: num,
       installmentTotal: count,
@@ -220,6 +225,7 @@ export interface RecurringBuildParams {
   categoryId: string | null;
   contactId: string | null;
   documentNumber: string;
+  issueDate?: string | null;
   notes: string;
   markFirstSettled?: boolean;
   paymentMethod?: string;
@@ -249,6 +255,7 @@ export function buildRecurringTransactions(params: RecurringBuildParams): Transa
       categoryId: params.categoryId || null,
       contactId: params.contactId || null,
       documentNumber: params.documentNumber.trim(),
+      issueDate: params.issueDate || null,
       installmentGroupId: groupId,
       installmentNumber: 1,
       installmentTotal: 1,
@@ -281,6 +288,7 @@ export function buildDuplicatedTransaction(tx: Transaction, nextDueDate?: string
     paidAt: null,
     status: 'pending',
     paymentMethod: '',
+    issueDate: tx.issueDate ?? null,
     installmentGroupId: tx.isRecurring ? tx.installmentGroupId || crypto.randomUUID() : null,
     installmentNumber: 1,
     installmentTotal: 1,
@@ -312,4 +320,67 @@ export function findDuplicateContactDocument<T extends { id: string; name: strin
   }
   return null;
 }
+
+export interface SettlementCalculationInput {
+  baseAmountCents: number;
+  interestCents?: number;
+  discountCents?: number;
+}
+
+export interface SettlementCalculationResult {
+  baseAmountCents: number;
+  interestCents: number;
+  discountCents: number;
+  finalAmountCents: number;
+  isValid: boolean;
+  error?: string;
+}
+
+/**
+ * Calcula o valor final liquidado (Valor Base + Juros - Desconto) em centavos,
+ * bloqueando descontos superiores ao valor base do título.
+ */
+export function calculateSettlement(
+  input: SettlementCalculationInput
+): SettlementCalculationResult {
+  const baseAmountCents = Math.max(0, Math.round(input.baseAmountCents || 0));
+  const interestCents = Math.max(0, Math.round(input.interestCents || 0));
+  const discountCents = Math.max(0, Math.round(input.discountCents || 0));
+
+  if (discountCents > baseAmountCents) {
+    return {
+      baseAmountCents,
+      interestCents,
+      discountCents,
+      finalAmountCents: baseAmountCents + interestCents,
+      isValid: false,
+      error: 'O desconto não pode ser maior que o valor do título.',
+    };
+  }
+
+  return {
+    baseAmountCents,
+    interestCents,
+    discountCents,
+    finalAmountCents: baseAmountCents + interestCents - discountCents,
+    isValid: true,
+  };
+}
+
+/**
+ * Retorna o valor final liquidado em centavos (Valor Base + Juros - Desconto).
+ * Lança erro caso o desconto exceda o valor base do título.
+ */
+export function calculateSettledAmount(
+  baseAmountCents: number,
+  interestCents = 0,
+  discountCents = 0
+): number {
+  const result = calculateSettlement({ baseAmountCents, interestCents, discountCents });
+  if (!result.isValid) {
+    throw new Error(result.error);
+  }
+  return result.finalAmountCents;
+}
+
 

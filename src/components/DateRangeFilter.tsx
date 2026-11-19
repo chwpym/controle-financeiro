@@ -221,23 +221,31 @@ export const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
               <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-300 mb-1">
                 {currentValue.dateField === 'paidAt' ? 'Data da baixa (De)' : 'Data inicial (De)'}
               </label>
-              <input
-                type="date"
-                value={currentValue.dateFrom}
-                onChange={(e) => emitChange({ ...currentValue, dateFrom: e.target.value })}
-                className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-mono-tabular min-h-[38px]"
-              />
+              <div className="relative">
+                <Calendar className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="date"
+                  value={currentValue.dateFrom}
+                  onChange={(e) => emitChange({ ...currentValue, dateFrom: e.target.value })}
+                  onClick={(e) => e.currentTarget.showPicker?.()}
+                  className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-mono-tabular min-h-[38px] cursor-pointer dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:opacity-0"
+                />
+              </div>
             </div>
             <div>
               <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-300 mb-1">
                 {currentValue.dateField === 'paidAt' ? 'Data da baixa (Até)' : 'Data final (Até)'}
               </label>
-              <input
-                type="date"
-                value={currentValue.dateTo}
-                onChange={(e) => emitChange({ ...currentValue, dateTo: e.target.value })}
-                className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-mono-tabular min-h-[38px]"
-              />
+              <div className="relative">
+                <Calendar className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="date"
+                  value={currentValue.dateTo}
+                  onChange={(e) => emitChange({ ...currentValue, dateTo: e.target.value })}
+                  onClick={(e) => e.currentTarget.showPicker?.()}
+                  className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-mono-tabular min-h-[38px] cursor-pointer dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:opacity-0"
+                />
+              </div>
             </div>
           </div>
 

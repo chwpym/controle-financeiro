@@ -81,6 +81,7 @@ export interface Transaction {
   categoryId: string | null;
   contactId: string | null;
   documentNumber: string;
+  issueDate: string | null; // YYYY-MM-DD
   installmentGroupId: string | null;
   installmentNumber: number;
   installmentTotal: number;

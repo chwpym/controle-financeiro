@@ -277,6 +277,7 @@ export function buildTransactionsFromXmlItems(
     categoryId,
     contactId,
     documentNumber: item.documentNumber.slice(0, 60),
+    issueDate: null,
     installmentGroupId: item.installmentGroupId,
     installmentNumber: item.installmentNumber,
     installmentTotal: item.installmentTotal,

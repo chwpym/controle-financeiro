@@ -408,6 +408,7 @@ export function buildTransactionsFromExcelRows(
       categoryId: item.categoryId,
       contactId: item.contactId,
       documentNumber: item.documentNumber,
+      issueDate: null,
       installmentGroupId: null,
       installmentNumber: 1,
       installmentTotal: 1,
