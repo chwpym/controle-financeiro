@@ -25,6 +25,7 @@ interface TransactionsViewProps {
   onBatchDelete: (ids: string[]) => void;
   onDeleteSingle: (tx: Transaction) => void;
   onDeleteGroup: (groupId: string) => void;
+  onManageInstallments?: (tx: Transaction) => void;
 }
 
 export const TransactionsView: React.FC<TransactionsViewProps> = ({
@@ -44,6 +45,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   onBatchDelete,
   onDeleteSingle,
   onDeleteGroup,
+  onManageInstallments,
 }) => {
   const [dateFilter, setDateFilter] = useState<DateFilterValue>(() =>
     createDateFilterState(selectedMonth, 'month')
@@ -174,6 +176,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         onToggleSettle={onToggleSettle}
         onDuplicate={onDuplicate}
         onRequestDelete={setConfirmDeleteTx}
+        onManageInstallments={onManageInstallments}
       />
 
       {batchSettleOpen && selection.pending.length > 0 && (

@@ -21,6 +21,9 @@ import {
   findDuplicateContactDocument,
   calculateSettlement,
   calculateSettledAmount,
+  distributeCents,
+  splitSingleTransactionIntoInstallments,
+  renegotiateInstallmentGroup,
 } from '../format';
 import type { Transaction } from '../../types';
 
@@ -621,5 +624,245 @@ describe('Settlement calculation with interest and discount', () => {
     );
   });
 });
+
+describe('distributeCents', () => {
+  it('distributes cents evenly when divisible', () => {
+    expect(distributeCents(12000, 3)).toEqual([4000, 4000, 4000]);
+  });
+
+  it('allocates remainder cent to the first installment when odd', () => {
+    // R$ 100,00 (10000 cents) divided by 3 -> 3334, 3333, 3333
+    expect(distributeCents(10000, 3)).toEqual([3334, 3333, 3333]);
+    // R$ 10,00 (1000 cents) divided by 3 -> 334, 333, 333
+    expect(distributeCents(1000, 3)).toEqual([334, 333, 333]);
+    // Remainder of 2 cents: 10001 / 3 = 3333 with remainder 2
+    expect(distributeCents(10001, 3)).toEqual([3335, 3333, 3333]);
+  });
+});
+
+describe('splitSingleTransactionIntoInstallments', () => {
+  const baseSingleTx: Transaction = {
+    id: 'tx-single-1',
+    userId: 'u1',
+    type: 'payable',
+    description: 'Compra de Maquinário',
+    amountCents: 10000, // R$ 100,00
+    discountCents: 0,
+    interestCents: 0,
+    dueDate: '2026-11-20',
+    paidAt: null,
+    status: 'pending',
+    paymentMethod: '',
+    categoryId: 'cat-eq',
+    contactId: 'ct-forn-1',
+    documentNumber: 'NF-9081',
+    issueDate: '2026-11-15',
+    installmentGroupId: null,
+    installmentNumber: 1,
+    installmentTotal: 1,
+    isRecurring: false,
+    recurrenceInterval: null,
+    notes: 'Nota parcelada pelo fornecedor',
+    source: 'manual',
+    createdAt: '2026-11-19T10:00:00.000Z',
+    updatedAt: '2026-11-19T10:00:00.000Z',
+  };
+
+  it('splits single transaction into 3x with odd cents allocating remainder to 1st installment', () => {
+    const installments = splitSingleTransactionIntoInstallments(
+      baseSingleTx,
+      3,
+      '2026-12-10',
+      'total'
+    );
+
+    expect(installments).toHaveLength(3);
+    const sumCents = installments.reduce((acc, t) => acc + t.amountCents, 0);
+    expect(sumCents).toBe(10000); // 100% exact sum
+
+    expect(installments[0].amountCents).toBe(3334);
+    expect(installments[1].amountCents).toBe(3333);
+    expect(installments[2].amountCents).toBe(3333);
+
+    // Common properties & metadata preserved
+    const groupId = installments[0].installmentGroupId;
+    expect(groupId).toBeTruthy();
+    expect(installments[1].installmentGroupId).toBe(groupId);
+    expect(installments[2].installmentGroupId).toBe(groupId);
+
+    installments.forEach((tx, idx) => {
+      expect(tx.userId).toBe('u1');
+      expect(tx.type).toBe('payable');
+      expect(tx.categoryId).toBe('cat-eq');
+      expect(tx.contactId).toBe('ct-forn-1');
+      expect(tx.documentNumber).toBe('NF-9081');
+      expect(tx.issueDate).toBe('2026-11-15');
+      expect(tx.notes).toBe('Nota parcelada pelo fornecedor');
+      expect(tx.status).toBe('pending');
+      expect(tx.paidAt).toBeNull();
+      expect(tx.installmentNumber).toBe(idx + 1);
+      expect(tx.installmentTotal).toBe(3);
+      expect(tx.id).not.toBe(baseSingleTx.id);
+    });
+
+    expect(installments[0].description).toBe('Compra de Maquinário (1/3)');
+    expect(installments[1].description).toBe('Compra de Maquinário (2/3)');
+    expect(installments[2].description).toBe('Compra de Maquinário (3/3)');
+
+    expect(installments[0].dueDate).toBe('2026-12-10');
+    expect(installments[1].dueDate).toBe('2027-01-10');
+    expect(installments[2].dueDate).toBe('2027-02-10');
+  });
+
+  it('supports per_installment mode repeating amount across installments', () => {
+    const installments = splitSingleTransactionIntoInstallments(
+      baseSingleTx,
+      2,
+      '2026-12-05',
+      'per_installment'
+    );
+
+    expect(installments).toHaveLength(2);
+    expect(installments[0].amountCents).toBe(10000);
+    expect(installments[1].amountCents).toBe(10000);
+    expect(installments[0].dueDate).toBe('2026-12-05');
+    expect(installments[1].dueDate).toBe('2027-01-05');
+  });
+});
+
+describe('renegotiateInstallmentGroup', () => {
+  const existingGroupId = 'group-orig-999';
+  const groupTxs: Transaction[] = [
+    {
+      id: 'tx-p1-paid',
+      userId: 'u1',
+      type: 'payable',
+      description: 'Contrato de Reforma (1/3)',
+      amountCents: 50000, // R$ 500,00
+      discountCents: 0,
+      interestCents: 0,
+      dueDate: '2026-09-10',
+      paidAt: '2026-09-10',
+      status: 'settled',
+      paymentMethod: 'PIX',
+      categoryId: 'cat-reforma',
+      contactId: 'ct-empreiteiro',
+      documentNumber: 'CTR-01',
+      issueDate: '2026-08-25',
+      installmentGroupId: existingGroupId,
+      installmentNumber: 1,
+      installmentTotal: 3,
+      isRecurring: false,
+      recurrenceInterval: null,
+      notes: 'Parcela 1 quitada',
+      source: 'manual',
+      createdAt: '2026-08-25T10:00:00.000Z',
+      updatedAt: '2026-09-10T12:00:00.000Z',
+    },
+    {
+      id: 'tx-p2-pending',
+      userId: 'u1',
+      type: 'payable',
+      description: 'Contrato de Reforma (2/3)',
+      amountCents: 50000,
+      discountCents: 0,
+      interestCents: 0,
+      dueDate: '2026-10-10',
+      paidAt: null,
+      status: 'pending',
+      paymentMethod: '',
+      categoryId: 'cat-reforma',
+      contactId: 'ct-empreiteiro',
+      documentNumber: 'CTR-01',
+      issueDate: '2026-08-25',
+      installmentGroupId: existingGroupId,
+      installmentNumber: 2,
+      installmentTotal: 3,
+      isRecurring: false,
+      recurrenceInterval: null,
+      notes: 'Parcela pendente original',
+      source: 'manual',
+      createdAt: '2026-08-25T10:00:00.000Z',
+      updatedAt: '2026-08-25T10:00:00.000Z',
+    },
+    {
+      id: 'tx-p3-pending',
+      userId: 'u1',
+      type: 'payable',
+      description: 'Contrato de Reforma (3/3)',
+      amountCents: 50000,
+      discountCents: 0,
+      interestCents: 0,
+      dueDate: '2026-11-10',
+      paidAt: null,
+      status: 'pending',
+      paymentMethod: '',
+      categoryId: 'cat-reforma',
+      contactId: 'ct-empreiteiro',
+      documentNumber: 'CTR-01',
+      issueDate: '2026-08-25',
+      installmentGroupId: existingGroupId,
+      installmentNumber: 3,
+      installmentTotal: 3,
+      isRecurring: false,
+      recurrenceInterval: null,
+      notes: 'Parcela pendente original',
+      source: 'manual',
+      createdAt: '2026-08-25T10:00:00.000Z',
+      updatedAt: '2026-08-25T10:00:00.000Z',
+    },
+  ];
+
+  it('renegotiates remaining pending balance into 4x keeping settled transaction intact', () => {
+    // Total remaining: 50000 + 50000 = 100000 (R$ 1.000,00)
+    // Redivided into 4 installments: 25000 each (R$ 250,00)
+    // New total installments: 1 paid + 4 new = 5 total
+    const { toDeleteIds, toUpsert } = renegotiateInstallmentGroup(groupTxs, 4, '2026-12-15');
+
+    // Pending txs should be marked for deletion
+    expect(toDeleteIds).toEqual(['tx-p2-pending', 'tx-p3-pending']);
+
+    // toUpsert contains: 1 updated settled tx + 4 new pending txs = 5 txs
+    expect(toUpsert).toHaveLength(5);
+
+    // 1. Settled transaction remains shielded:
+    const settled = toUpsert.find((t) => t.id === 'tx-p1-paid')!;
+    expect(settled).toBeDefined();
+    expect(settled.status).toBe('settled');
+    expect(settled.paidAt).toBe('2026-09-10');
+    expect(settled.amountCents).toBe(50000);
+    expect(settled.dueDate).toBe('2026-09-10');
+    expect(settled.paymentMethod).toBe('PIX');
+    expect(settled.installmentNumber).toBe(1);
+    expect(settled.installmentTotal).toBe(5); // Updated from 3 to 5
+    expect(settled.description).toBe('Contrato de Reforma (1/5)');
+
+    // 2. Four new pending transactions created with remaining balance:
+    const newTxs = toUpsert.filter((t) => t.id !== 'tx-p1-paid');
+    expect(newTxs).toHaveLength(4);
+
+    const sumRemaining = newTxs.reduce((acc, t) => acc + t.amountCents, 0);
+    expect(sumRemaining).toBe(100000); // 1000,00 exact cents
+
+    newTxs.forEach((tx, idx) => {
+      expect(tx.status).toBe('pending');
+      expect(tx.paidAt).toBeNull();
+      expect(tx.amountCents).toBe(25000);
+      expect(tx.installmentNumber).toBe(idx + 2); // 2, 3, 4, 5
+      expect(tx.installmentTotal).toBe(5);
+      expect(tx.installmentGroupId).toBe(existingGroupId);
+      expect(tx.contactId).toBe('ct-empreiteiro');
+      expect(tx.categoryId).toBe('cat-reforma');
+      expect(tx.documentNumber).toBe('CTR-01');
+      expect(tx.issueDate).toBe('2026-08-25');
+    });
+
+    expect(newTxs[0].dueDate).toBe('2026-12-15');
+    expect(newTxs[1].dueDate).toBe('2027-01-15');
+    expect(newTxs[2].dueDate).toBe('2027-02-15');
+    expect(newTxs[3].dueDate).toBe('2027-03-15');
+  });
+});
+
 
 

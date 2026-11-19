@@ -145,6 +145,21 @@ export const PAYMENT_METHODS = [
 export const MAX_INSTALLMENTS = 420;
 export const QUICK_INSTALLMENT_PRESETS = [1, 2, 3, 6, 10, 12, 24, 36, 60, 120] as const;
 
+/**
+ * Distribui centavos exatos entre uma quantidade de parcelas,
+ * alocando a sobra dos centavos na primeira parcela.
+ */
+export function distributeCents(totalCents: number, count: number): number[] {
+  const safeCount = Math.max(1, Math.floor(count));
+  const base = Math.floor(totalCents / safeCount);
+  const remainder = totalCents - base * safeCount;
+  const result: number[] = [];
+  for (let i = 0; i < safeCount; i++) {
+    result.push(Math.max(1, base + (i === 0 ? remainder : 0)));
+  }
+  return result;
+}
+
 export interface InstallmentBuildParams {
   userId: string;
   type: TransactionType;
@@ -381,6 +396,145 @@ export function calculateSettledAmount(
     throw new Error(result.error);
   }
   return result.finalAmountCents;
+}
+
+/**
+ * Converte um lançamento à vista pendente em um lote de N parcelas flexíveis (até 420x).
+ */
+export function splitSingleTransactionIntoInstallments(
+  originalTx: Transaction,
+  installments: number,
+  firstDueDate: string,
+  amountMode: 'total' | 'per_installment'
+): Transaction[] {
+  const count = Math.max(1, Math.min(MAX_INSTALLMENTS, Math.floor(installments || 1)));
+  const now = new Date().toISOString();
+  const groupId = count > 1 ? crypto.randomUUID() : null;
+  const cleanDesc = (originalTx.description || '').replace(/\s*\(\d+\/\d+\)$/, '').trim();
+
+  let amounts: number[];
+  if (count === 1 || amountMode === 'per_installment') {
+    amounts = Array(count).fill(Math.max(1, originalTx.amountCents));
+  } else {
+    amounts = distributeCents(originalTx.amountCents, count);
+  }
+
+  return amounts.map((cents, idx) => {
+    const num = idx + 1;
+    const suffix = count > 1 ? ` (${num}/${count})` : '';
+    return {
+      id: crypto.randomUUID(),
+      userId: originalTx.userId,
+      type: originalTx.type,
+      description: `${cleanDesc}${suffix}`,
+      amountCents: cents,
+      discountCents: 0,
+      interestCents: 0,
+      dueDate: addMonthsISO(firstDueDate, idx),
+      paidAt: null,
+      status: 'pending' as const,
+      paymentMethod: '',
+      categoryId: originalTx.categoryId || null,
+      contactId: originalTx.contactId || null,
+      documentNumber: (originalTx.documentNumber || '').trim(),
+      issueDate: originalTx.issueDate || null,
+      installmentGroupId: groupId,
+      installmentNumber: num,
+      installmentTotal: count,
+      isRecurring: false,
+      recurrenceInterval: null,
+      notes: (originalTx.notes || '').trim(),
+      source: originalTx.source || 'manual',
+      createdAt: now,
+      updatedAt: now,
+    };
+  });
+}
+
+export interface RenegotiateResult {
+  toDeleteIds: string[];
+  toUpsert: Transaction[];
+}
+
+/**
+ * Renegocia o saldo devedor restante de um parcelamento existente,
+ * mantendo as parcelas já pagas (settled) 100% blindadas e recalculando
+ * apenas as pendentes em um novo cronograma.
+ */
+export function renegotiateInstallmentGroup(
+  groupTxs: Transaction[],
+  newInstallmentsCount: number,
+  newFirstDueDate: string
+): RenegotiateResult {
+  if (!groupTxs.length) {
+    return { toDeleteIds: [], toUpsert: [] };
+  }
+
+  const baseTx = groupTxs[0];
+  const groupId = baseTx.installmentGroupId || crypto.randomUUID();
+  const cleanDesc = (baseTx.description || '').replace(/\s*\(\d+\/\d+\)$/, '').trim();
+  const now = new Date().toISOString();
+
+  // Separar parcelas quitadas (blindadas) e pendentes
+  const settledTxs = groupTxs
+    .filter((t) => t.status === 'settled')
+    .sort((a, b) => a.installmentNumber - b.installmentNumber || a.dueDate.localeCompare(b.dueDate));
+
+  const pendingTxs = groupTxs.filter((t) => t.status !== 'settled');
+
+  const safeNewCount = Math.max(1, Math.min(MAX_INSTALLMENTS, Math.floor(newInstallmentsCount || 1)));
+  const settledCount = settledTxs.length;
+  const newTotal = settledCount + safeNewCount;
+
+  // Atualizar as parcelas pagas apenas no installmentTotal e descrição de índice, mantendo datas, valores e histórico
+  const updatedSettled = settledTxs.map((tx, idx) => ({
+    ...tx,
+    installmentGroupId: groupId,
+    installmentNumber: idx + 1,
+    installmentTotal: newTotal,
+    description: `${cleanDesc} (${idx + 1}/${newTotal})`,
+    updatedAt: now,
+  }));
+
+  // Saldo devedor restante baseado nas parcelas pendentes
+  const remainingCents = pendingTxs.reduce((sum, t) => sum + t.amountCents, 0);
+  const distributedCents = distributeCents(remainingCents, safeNewCount);
+
+  // Gerar novas parcelas para o saldo devedor
+  const newPendingTxs: Transaction[] = distributedCents.map((cents, idx) => {
+    const num = settledCount + idx + 1;
+    return {
+      id: crypto.randomUUID(),
+      userId: baseTx.userId,
+      type: baseTx.type,
+      description: `${cleanDesc} (${num}/${newTotal})`,
+      amountCents: cents,
+      discountCents: 0,
+      interestCents: 0,
+      dueDate: addMonthsISO(newFirstDueDate, idx),
+      paidAt: null,
+      status: 'pending' as const,
+      paymentMethod: '',
+      categoryId: baseTx.categoryId || null,
+      contactId: baseTx.contactId || null,
+      documentNumber: (baseTx.documentNumber || '').trim(),
+      issueDate: baseTx.issueDate || null,
+      installmentGroupId: groupId,
+      installmentNumber: num,
+      installmentTotal: newTotal,
+      isRecurring: false,
+      recurrenceInterval: null,
+      notes: (baseTx.notes || '').trim(),
+      source: baseTx.source || 'manual',
+      createdAt: now,
+      updatedAt: now,
+    };
+  });
+
+  return {
+    toDeleteIds: pendingTxs.map((t) => t.id),
+    toUpsert: [...updatedSettled, ...newPendingTxs],
+  };
 }
 
 

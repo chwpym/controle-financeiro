@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, Copy, Edit2, Eye, Plus, Repeat, RotateCcw, Trash2 } from 'lucide-react';
+import { CheckCircle2, Copy, Edit2, Eye, Layers, Plus, Repeat, RotateCcw, Trash2 } from 'lucide-react';
 import type { Category, Contact, Transaction } from '../../types';
 import { formatBRL, formatDateBR, isOverdue, RECURRENCE_LABELS } from '../../utils/format';
 
@@ -18,6 +18,7 @@ export interface TransactionTableProps {
   onToggleSettle: (tx: Transaction) => void;
   onDuplicate: (tx: Transaction) => void;
   onRequestDelete: (tx: Transaction) => void;
+  onManageInstallments?: (tx: Transaction) => void;
 }
 
 function getStatusMeta(tx: Transaction, today: string) {
@@ -51,6 +52,7 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
   onToggleSettle,
   onDuplicate,
   onRequestDelete,
+  onManageInstallments,
 }) => {
   if (transactions.length === 0) {
     return (
@@ -72,6 +74,8 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
 
   const renderActionButtons = (tx: Transaction, mobile = false) => {
     const isSettled = tx.status === 'settled';
+    const isGroup = Boolean(tx.installmentGroupId || tx.installmentTotal > 1);
+    const manageTitle = isGroup ? 'Gerenciar parcelas / Renegociar' : 'Dividir em parcelas';
     const settleLabel = isSettled ? 'Reabrir' : tx.type === 'receivable' ? 'Receber' : 'Pagar';
     const actions = [
       {
@@ -83,6 +87,16 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
         desktopClass: 'text-teal-700 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-950/40',
         mobileClass: 'border-teal-200 dark:border-teal-800 text-teal-800 dark:text-teal-300',
         onClick: () => onOpenConsult(tx),
+      },
+      {
+        key: 'installments',
+        label: isGroup ? 'Parcelas' : 'Dividir',
+        title: manageTitle,
+        ariaLabel: `${manageTitle}: ${tx.description}`,
+        icon: <Layers className={mobile ? 'w-3.5 h-3.5' : 'w-4 h-4'} />,
+        desktopClass: 'text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40',
+        mobileClass: 'border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300',
+        onClick: () => onManageInstallments?.(tx),
       },
       {
         key: 'duplicate',

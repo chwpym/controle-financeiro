@@ -24,6 +24,7 @@ import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { ContactsView } from './components/ContactsView';
 import { DashboardView } from './components/DashboardView';
 import { ExcelImportModal } from './components/ExcelImportModal';
+import { InstallmentManagerModal } from './components/InstallmentManagerModal';
 import { NotificationsBell } from './components/NotificationsBell';
 import { OfflineSyncBanner, PWAInstallButton } from './components/PWAInstallButton';
 import { ReportsView } from './components/ReportsView';
@@ -132,6 +133,7 @@ export default function App() {
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [consultingTx, setConsultingTx] = useState<Transaction | null>(null);
   const [settlingTx, setSettlingTx] = useState<Transaction | null>(null);
+  const [installmentManagerTx, setInstallmentManagerTx] = useState<Transaction | null>(null);
   const [xmlModalOpen, setXmlModalOpen] = useState(false);
   const [excelModalOpen, setExcelModalOpen] = useState(false);
   const [changePassOpen, setChangePassOpen] = useState(false);
@@ -578,6 +580,35 @@ export default function App() {
     await persistCache(user.id, categories, contacts, next);
     showToast(`${ids.length} lançamento(s) excluído(s).`);
     await queueOrSync('tx_batch_delete', ids, () => api.deleteTransactionsBatch(ids));
+  };
+
+  const handleApplyRenegotiation = async (toDeleteIds: string[], toUpsert: Transaction[]) => {
+    if (!user) return;
+    const deleteSet = new Set(toDeleteIds);
+    const upsertMap = new Map(toUpsert.map((t) => [t.id, t]));
+    const remaining = transactions.filter((t) => !deleteSet.has(t.id));
+    const merged = remaining.map((t) => (upsertMap.has(t.id) ? upsertMap.get(t.id)! : t));
+    for (const t of toUpsert) {
+      if (!merged.some((m) => m.id === t.id)) {
+        merged.push(t);
+      }
+    }
+    merged.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+    setTransactions(merged);
+    await persistCache(user.id, categories, contacts, merged);
+
+    showToast(
+      toDeleteIds.length > 0 && toUpsert.length > 1
+        ? `Renegociação aplicada com sucesso (${toUpsert.length} parcelas no contrato).`
+        : `${toUpsert.length} parcelas geradas com sucesso.`
+    );
+
+    if (toDeleteIds.length > 0) {
+      await queueOrSync('tx_batch_delete', toDeleteIds, () => api.deleteTransactionsBatch(toDeleteIds));
+    }
+    if (toUpsert.length > 0) {
+      await queueOrSync('tx_batch_upsert', toUpsert, () => api.upsertTransactionsBatch(toUpsert));
+    }
   };
 
   const handleDeleteSingleTransaction = async (tx: Transaction) => {
@@ -1063,6 +1094,7 @@ export default function App() {
                   onBatchDelete={handleBatchDelete}
                   onDeleteSingle={handleDeleteSingleTransaction}
                   onDeleteGroup={handleDeleteTransactionGroup}
+                  onManageInstallments={(tx) => setInstallmentManagerTx(tx)}
                 />
               )}
 
@@ -1248,6 +1280,17 @@ export default function App() {
           }}
           onSaveBatch={handleSaveTransactionBatch}
           onUpdateSingle={handleUpdateSingleTransaction}
+        />
+      )}
+
+      {installmentManagerTx && (
+        <InstallmentManagerModal
+          isOpen={Boolean(installmentManagerTx)}
+          transaction={installmentManagerTx}
+          transactions={transactions}
+          contacts={contacts}
+          onClose={() => setInstallmentManagerTx(null)}
+          onApplyRenegotiation={handleApplyRenegotiation}
         />
       )}
 
