@@ -18,7 +18,7 @@ Transformar o **FluxoClaro** em um sistema financeiro modular, de fácil manuten
 [⏳ Fase 3: Risco Baixo]      -> Decomposição da tela de Contas P/R (TransactionsView)
 [⏳ Fase 4: Parcelamento 420x]-> Suporte a parcelamentos longos (até 420x) com prévia compacta
 [✅ Fase 5: Risco Médio]      -> Decomposição do Dashboard em cards modulares
-[⏳ Fase 6: Backend Limpo]    -> Separação do server.ts em routes, services e repositories
+[✅ Fase 6: Backend Limpo]    -> Separação do server.ts em arquitetura em camadas modular
 ```
 
 ---
@@ -103,25 +103,37 @@ Adequação do modal de lançamentos (`TransactionModal.tsx`) para contratos lon
 
 ---
 
-## 🔌 FASE 6: Arquitetura em Camadas do Backend (`server.ts`)
+## ✅ FASE 6: Concluída com Sucesso (Arquitetura em Camadas do Backend)
 
-`server.ts` possui **1.224 linhas**. Vamos reorganizá-lo sem mexer no banco SQLite existente:
+`server.ts` foi reduzido de **1.253 linhas para 66 linhas** (< 90 linhas). A estrutura foi totalmente desacoplada sob `server/`:
 
-1. `server/config/db.ts`: Conexão SQLite, modo WAL e execução de migrations/tabelas.
-2. `server/repositories/`: Queries SQL isoladas e preparadas:
-   * `transactionRepository.ts`
-   * `contactRepository.ts`
-   * `categoryRepository.ts`
-3. `server/services/`: Regras de negócio puras:
-   * `installmentService.ts` (criação de carnês em transação atômica ACID).
-   * `authService.ts` (hash scrypt, verificação de senha).
-4. `server/routes/`: Controladores Express enxutos:
-   * `transactionRoutes.ts`
-   * `contactRoutes.ts`
-   * `categoryRoutes.ts`
-   * `authRoutes.ts`
+1. `server/db.ts` (235 linhas):
+   - Conexão Better-SQLite3 (`data/fluxoclaro.db`) em modo WAL e chaves estrangeiras ativas.
+   - Schemas das tabelas `users`, `categories`, `contacts`, `transactions` e índices essenciais.
+   - Migrations seguras (`payment_method`, `discount_cents`, `interest_cents`, `is_recurring`, `recurrence_interval`, `issue_date`).
+   - Seeding automático do Usuário Master padrão (`master` / `master123`) com categorias, contatos e lançamentos de demonstração.
+2. `server/middleware/auth.ts` (140 linhas):
+   - Chave secreta HMAC persistente (`data/.auth_secret` ou `SESSION_SECRET`).
+   - Hash e verificação segura de senhas via `crypto.scrypt` com `timingSafeEqual`.
+   - Assinatura e validação de tokens JWT/HMAC com expiração de 30 dias.
+   - Middlewares Express: `requireAuth`, `requireMasterOrAdmin` e `requireMasterOnly`.
+3. `server/routes/auth.ts` (108 linhas):
+   - Endpoints `/api/auth/login`, `/register`, `/me` e `/change-password`.
+4. `server/routes/bootstrap.ts` (186 linhas):
+   - Endpoints `/api/data/snapshot` e `/api/bootstrap` para sincronização inicial completa.
+   - Proxies resilientes de consulta de endereço `/api/lookup/cep/:cep` e `/api/lookup/cnpj/:cnpj` (ViaCEP, BrasilAPI e Pública CNPJ com fallbacks e timeouts).
+5. `server/routes/transactions.ts` (223 linhas):
+   - CRUD completo de contas a pagar e receber: `GET /`, `POST /batch`, `PUT /:id`, `POST /batch-delete`, `DELETE /:id`, `DELETE /group/:groupId`.
+6. `server/routes/contacts.ts` (151 linhas):
+   - CRUD de clientes e fornecedores com validação de unicidade de CPF/CNPJ por usuário.
+7. `server/routes/categories.ts` (77 linhas):
+   - CRUD de categorias de receitas e despesas.
+8. `server/routes/backup.ts` (161 linhas):
+   - Endpoints `/api/backup/export` e `/api/backup/restore` com restauração atômica em transação SQLite.
+9. `server/routes/admin.ts` (237 linhas):
+   - Painel Master/Admin: resumo estatístico `/summary`, listagem `/users`, cadastro, edição, suspensão `/status`, reset de senha e exclusão com proteção do último Master ativo.
 
-* **Critério de Sucesso:** `server.ts` vira apenas o bootstrap do Express com ~80 linhas.
+* **Validação:** 69 testes unitários passando no Vitest (100% verde), 0 erros no TypeScript (`npm run lint`), `server.ts` orquestrador com apenas 66 linhas.
 
 ---
 
