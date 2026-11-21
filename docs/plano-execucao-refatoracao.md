@@ -15,10 +15,11 @@ Transformar o **FluxoClaro** em um sistema financeiro modular, de fácil manuten
 ```
 [✅ Fase 1: Risco Zero]       -> Extrações de Ficha Financeira e componentes comuns (SearchBar, KpiCard)
 [✅ Fase 2: Rede de Proteção] -> Suíte de testes unitários para centavos e baixas no Vitest
-[⏳ Fase 3: Risco Baixo]      -> Decomposição da tela de Contas P/R (TransactionsView)
-[⏳ Fase 4: Parcelamento 420x]-> Suporte a parcelamentos longos (até 420x) com prévia compacta
+[✅ Fase 3: Risco Baixo]      -> Decomposição da tela de Contas P/R (TransactionsView)
+[✅ Fase 4: Parcelamento 420x]-> Suporte a parcelamentos longos (até 420x) e Gestão de Renegociação
 [✅ Fase 5: Risco Médio]      -> Decomposição do Dashboard em cards modulares
 [✅ Fase 6: Backend Limpo]    -> Separação do server.ts em arquitetura em camadas modular
+[✅ Fase 7: XML Avançado]     -> Importação de NF-e (Compra/Venda), NFS-e e Modularização
 ```
 
 ---
@@ -36,51 +37,40 @@ Transformar o **FluxoClaro** em um sistema financeiro modular, de fácil manuten
 
 ---
 
-## 💳 FASE 3: Modularização de Contas P/R (`TransactionsView.tsx`)
+## ✅ FASE 3: Concluída com Sucesso (Modularização de Contas P/R)
 
-`TransactionsView.tsx` tem atualmente **747 linhas**. Vamos dividi-lo em submódulos coesos:
+`TransactionsView.tsx` foi reduzido de **775 linhas para 241 linhas** (< 250 linhas). A tela foi decomposta em submódulos coesos em `src/components/transactions/`:
 
-### Passo 3.1: Extração da Barra de Filtros (`TransactionFilters.tsx`)
-* Criar `src/components/transactions/TransactionFilters.tsx` (~120 linhas):
-  * Utilizar o `SearchBar.tsx` criado na Fase 1;
-  * Seletor de mês e ano (`MonthYearSelector`);
-  * Pílulas rápidas de status: *Todos*, *A Pagar*, *A Receber*, *Pendentes*, *Pagos/Recebidos*, *Vencidos*;
-  * Filtro por categoria e filtro por contato.
-
-### Passo 3.2: Extração da Barra de Ações em Lote (`BatchActionBar.tsx`)
-* Criar `src/components/transactions/BatchActionBar.tsx` (~90 linhas):
-  * Barra flutuante ou fixa que surge quando 1 ou mais contas são selecionadas;
-  * Contador de itens selecionados e soma do valor total selecionado (`font-mono-tabular`);
-  * Botões de ação rápida: *Baixar Selecionados* (abre `BatchSettleModal`) e *Excluir Selecionados* (com confirmação).
-
-### Passo 3.3: Tabela Limpa de Lançamentos (`TransactionTable.tsx`)
-* Criar `src/components/transactions/TransactionTable.tsx` (~220 linhas):
-  * Alinhamento numérico estrito com `font-mono-tabular` para valores, datas e números de parcela;
-  * Cores semânticas da `taste-skill` (verde esmeralda para receitas, vermelho rose para despesas, âmbar para pendências);
-  * Ações por linha com tooltips: *Baixar*, *Consultar*, *Duplicar (1 clique)* e *Excluir*.
-
-* **Critério de Sucesso:** `TransactionsView.tsx` atua apenas como container orquestrador, caindo para **menos de 200 linhas**. `npm run lint` e `npm test` continuam com 0 erros.
+- [x] **Passo 3.1: Barra de Filtros (`TransactionFilters.tsx` - 228 linhas):**
+  - Utiliza `SearchBar.tsx` com busca textual em tempo real e busca global em todo o histórico (`searchAllHistory`).
+  - Seletor de período (`DateRangeFilter`), pílulas de status (*Todos, Pendentes, Vencidos, Pagos/Recebidos, Recorrentes*), filtro por categoria e por contato.
+  - Indicadores numéricos consolidados de Receitas, Despesas e Saldo com `font-mono-tabular`.
+- [x] **Passo 3.2: Barra de Ações em Lote (`BatchActionBar.tsx` - 68 linhas):**
+  - Barra de ações exibida dinamicamente quando itens são selecionados, com contador, somatório em BRL, baixa em lote (`BatchSettleModal`) e exclusão em lote com confirmação.
+- [x] **Passo 3.3: Tabela Limpa de Lançamentos (`TransactionTable.tsx` - 302 linhas):**
+  - Tabela desktop e cards mobile responsivos com alinhamento numérico estrito (`font-mono-tabular`).
+  - Exibição de documento, parcelas, data de emissão (`issueDate`) e ações rápidas (Consultar/Recibo, Duplicar, Baixar/Reabrir, Renegociar, Editar e Excluir).
+- [x] **Passo 3.4: Suporte a Múltiplas NFs:**
+  - Extraído `DocumentTagsInput.tsx` permitindo adicionar múltiplas NFs por lançamento com tags visuais (`[ + Adicionar NF ]`).
 
 ---
 
-## 📅 FASE 4: Parcelamento Flexível de Longo Prazo (Até 420x — 35 Anos)
+## ✅ FASE 4: Concluída com Sucesso (Parcelamento Flexível até 420x e Renegociação)
 
-Adequação do modal de lançamentos (`TransactionModal.tsx`) para contratos longos, financiamentos e parcelamentos fiscais:
-
-### Especificação de Negócio:
-* **Teto Máximo:** Até **420 parcelas** (35 anos — teto máximo do SFH e financiamentos imobiliários/Refis no Brasil).
-* **Atalhos Rápidos de Botão:**
-  `[1x (À vista)]` `[2x]` `[3x]` `[6x]` `[10x]` `[12x]` `[24x]` `[36x]` `[60x]` `[120x]` + campo livre numérico (1 a 420).
-* **Prévia Compacta Inteligente (Anti-travamento da tela):**
-  * Se for **até 6 parcelas:** Exibe a grade de inputs individuais com data e valor de cada uma.
-  * Se for **acima de 6 parcelas (ex: 24x, 60x, 120x, 420x):** Exibe o **Card de Resumo Sintético**:
-    ```text
-    📋 Resumo do Parcelamento (420 parcelas):
-    • 420 parcelas mensais de R$ 1.500,00 (Total: R$ 630.000,00)
-    • 1ª parcela: 10/12/2026 · Última parcela: 10/11/2061
-    [👁️ Expandir grade completa para alterar datas/valores específicos]
-    ```
-* **Critério de Sucesso:** A tela gera 420 parcelas instantaneamente, sem travamentos de navegador e com divisão de centavos 100% exata testada pelo Vitest.
+- [x] **Teto de 420 Parcelas (35 Anos):**
+  - Constantes `MAX_INSTALLMENTS = 420` e presets `QUICK_INSTALLMENT_PRESETS` (`1x` a `120x`).
+  - Campo numérico livre com clamp e banner explicativo ao digitar valores superiores a 420.
+  - Card de Resumo Compacto inteligente para parcelamentos acima de 6x com grade expansível.
+  - Testes de centavos exatos no Vitest para 120x, 360x e 420x.
+- [x] **Decomposição Modular do `TransactionModal.tsx`:**
+  - Reduzido de **1.081 linhas para 240 linhas** (< 250 linhas) com subcomponentes dedicados em `src/components/transaction-modal/` (`DocumentTagsInput`, `InstallmentSection`, `RecurrenceSection`).
+- [x] **Data de Entrada / Emissão da NF (`issueDate`):**
+  - Integrado ao contrato `Transaction`, schema SQLite, rotas de persistência, modal e coluna na tabela.
+  - Validações inteligentes com alertas âmbar não-bloqueantes para pagamentos antecipados e datas futuras.
+- [x] **Gestão de Parcelas e Renegociação (`InstallmentManagerModal.tsx`):**
+  - Permite converter lançamentos à vista em parcelados.
+  - Permite renegociar contratos e saldo devedor em aberto, mantendo as parcelas já pagas blindadas no histórico contábil.
+  - Testes unitários puros em `format.test.ts` e de componente em `InstallmentManagerModal.test.tsx`.
 
 ---
 
@@ -134,6 +124,35 @@ Adequação do modal de lançamentos (`TransactionModal.tsx`) para contratos lon
    - Painel Master/Admin: resumo estatístico `/summary`, listagem `/users`, cadastro, edição, suspensão `/status`, reset de senha e exclusão com proteção do último Master ativo.
 
 * **Validação:** 69 testes unitários passando no Vitest (100% verde), 0 erros no TypeScript (`npm run lint`), `server.ts` orquestrador com apenas 66 linhas.
+
+---
+
+## ✅ FASE 7: Concluída com Sucesso (Módulo Avançado de Importações XML)
+
+`XmlImportModal.tsx` foi reduzido de **594 linhas para 171 linhas** (< 200 linhas) aplicando princípios de código enxuto (Ponytail), alta modularização e eliminando a restrição de apenas "Contas a Pagar".
+
+### Entregas Realizadas:
+1. **Evolução do Parser em `src/utils/xmlParser.ts`:**
+   - Suporte completo a NF-e de Saída/Venda (Contas a Receber) via elemento `<ide><tpNF>` (0 = Entrada/Compra, 1 = Saída/Venda).
+   - Extração do destinatário completo (`<dest>`): nome, documento (CPF/CNPJ) e endereço (`<enderDest>`).
+   - Suporte nativo a NFS-e de Serviços Eletrônica (Padrão ABRASF/Municipal) via `<InfNfse>`, `<CompNfse>` e `<tcCompNfse>`: prestador, tomador, número, data de emissão e valor líquido/serviços.
+   - Extração e propagação estrita do campo `issueDate` para todos os lançamentos gerados (`buildTransactionsFromXmlItems`).
+   - Função utilitária pura `buildContactFromXmlParty` para autocadastro com dados completos e máscaras de CPF/CNPJ e CEP.
+2. **Decomposição Modular sob `src/components/xml-import/`:**
+   - `XmlDropzone.tsx`: Área drag-and-drop com feedback visual de hover/drop e suporte a seleção de arquivos XML.
+   - `XmlContactMatcher.tsx`: Card de vinculação inteligente com auto-identificação e botão de autocadastro pré-preenchido para Cliente ou Fornecedor/Prestador.
+   - `XmlPreviewTable.tsx`: Tabela/lista de duplicatas e parcelas com checkbox individual, detecção de possíveis duplicidades, totalizadores em BRL e formatação estrita.
+   - `XmlGenericMapping.tsx`: Formulário de mapeamento caso o XML seja de outro formato genérico.
+   - `XmlDestinationFields.tsx`: Seletor de Categoria padrão (filtrada por tipo de transação) e seleção manual de contato.
+   - `useXmlImport.ts`: Hook desacoplado com toda a lógica de estado, leitura de arquivos, auto-matching e handlers de confirmação.
+   - `index.ts`: Barrel export modular.
+   - `XmlImportModal.tsx`: Orquestrador com apenas **171 linhas**, alternador inteligente entre `Conta a Pagar` e `Conta a Receber` com detecção automática do tipo de operação.
+3. **Suíte de Testes Unitários:**
+   - `src/utils/__tests__/xmlParser.test.ts`: 6 testes unitários cobrindo NF-e de Compra (tpNF 0), NF-e de Venda (tpNF 1), NFS-e ABRASF, propagação de `issueDate`, XML genérico e tratamento de erros.
+   - `src/components/xml-import/__tests__/xml-import-components.test.tsx`: 6 testes cobrindo todos os submódulos da importação e o modal.
+4. **Validação:**
+   - `npm test`: **78 testes passando (100% verde)** em 8 arquivos de teste.
+   - `npm run lint`: **0 erros de TypeScript**.
 
 ---
 
