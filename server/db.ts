@@ -3,13 +3,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
-import { hashPassword } from './middleware/auth';
+import { DATA_DIR } from './config';
+import { hashPassword } from './crypto';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-export const DATA_DIR = path.resolve(__dirname, '../data');
-fs.mkdirSync(DATA_DIR, { recursive: true });
+export { DATA_DIR } from './config';
 
 const DB_PATH = path.join(DATA_DIR, 'fluxoclaro.db');
 export const db = new Database(DB_PATH);
