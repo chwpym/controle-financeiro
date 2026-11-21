@@ -18,6 +18,8 @@ Ter essas skills salvas no repositório garante:
 | [`mobbin-ux.md`](./mobbin-ux.md) | **Mobbin Skills** (Mobbin) | [mobbin/skills](https://github.com/mobbin/skills) | Redesign seguro sem perda de funções, microcopy direto (*plain-writing*) e padrões de fintechs. |
 | [`ub-mode-tdd.md`](./ub-mode-tdd.md) | **UB-Mode / Clean Code** (Uncle Bob) | [unclebob/ub-mode](https://github.com/unclebob/ub-mode) | TDD estrito (Red-Green-Refactor), regras financeiras puras em centavos e qualidade de código. |
 | [`typescript-pocock.md`](./typescript-pocock.md) | **TypeScript Skills** (Matt Pocock) | [mattpocock/skills](https://github.com/mattpocock/skills) | TypeScript estrito, zero `any`, contratos de dados fortes e previsibilidade de tipos. |
+| [`ponytail-enxuto.md`](./ponytail-enxuto.md) | **Ponytail** (Dietrich Gebert / Akita) | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) | Código enxuto, anti-overengineering, reaproveitamento de componentes e zero bibliotecas supérfluas. |
+| [`workflow-especificacao.md`](./workflow-especificacao.md) | **Workflow Guiado por Spec** (Attekita / Pocock) | [mattpocock/skills](https://github.com/mattpocock/skills) | Desenvolvimento guiado por especificação: grill -> to-spec -> tickets verticais -> TDD -> review. |
 
 ---
 

@@ -17,7 +17,7 @@ Transformar o **FluxoClaro** em um sistema financeiro modular, de fácil manuten
 [✅ Fase 2: Rede de Proteção] -> Suíte de testes unitários para centavos e baixas no Vitest
 [⏳ Fase 3: Risco Baixo]      -> Decomposição da tela de Contas P/R (TransactionsView)
 [⏳ Fase 4: Parcelamento 420x]-> Suporte a parcelamentos longos (até 420x) com prévia compacta
-[⏳ Fase 5: Risco Médio]      -> Decomposição do Dashboard em cards modulares
+[✅ Fase 5: Risco Médio]      -> Decomposição do Dashboard em cards modulares
 [⏳ Fase 6: Backend Limpo]    -> Separação do server.ts em routes, services e repositories
 ```
 
@@ -84,17 +84,22 @@ Adequação do modal de lançamentos (`TransactionModal.tsx`) para contratos lon
 
 ---
 
-## 📊 FASE 5: Modularização do Dashboard (`DashboardView.tsx`)
+## ✅ FASE 5: Concluída com Sucesso (Modularização do Dashboard)
 
-`DashboardView.tsx` tem atualmente **1.202 linhas**. Vamos decompor cada bloco em `src/components/dashboard/`:
+`DashboardView.tsx` foi reduzido de **1.264 linhas para 187 linhas** (< 200 linhas). Submódulos extraídos em `src/components/dashboard/`:
 
-1. `DashboardKpis.tsx`: Os 4 cards de topo (Saldo, A Receber, A Pagar, Vencido) usando o `KpiCard.tsx`.
-2. `CashFlowDailyChart.tsx`: Gráfico de fluxo de caixa diário projetado.
-3. `CategoryExpenseChart.tsx`: Distribuição de despesas por categoria.
-4. `PaymentMethodSummary.tsx`: Resumo de entradas e saídas por forma de pagamento (PIX, Boleto, Cartão).
-5. `DueAlertsCard.tsx`: Lista de alertas de contas vencidas ou a vencer.
+1. `DashboardKpis.tsx`: Os 4 cards de topo (Saldo, A Receber, A Pagar, Vencido) usando `KpiCard.tsx` com `font-mono-tabular`, reordenação e clique para filtrar na tabela de contas.
+2. `MonthlyPerformanceChart.tsx`: Gráfico comparativo dos últimos 6 meses (Receitas × Despesas) com barras interativas, tooltips e legendas.
+3. `CategoryExpenseChart.tsx`: Distribuição e ranking de despesas por categoria com barras percentuais e valores formatados.
+4. `PaymentMethodSummary.tsx`: Resumo de entradas e saídas por forma de pagamento (PIX, Boleto, Cartão, etc.).
+5. `DailyCashFlowChart.tsx`: Gráfico de projeção diária acumulada de fluxo de caixa ao longo dos dias do mês.
+6. `DueAlertsCard.tsx`: Card de alertas de contas vencidas ou a vencer com baixa rápida e permissão de notificação.
+7. `DashboardConfigPopover.tsx`: Popover para personalização de visibilidade (`visibleWidgets`), alternância de largura (1 ou 2 colunas) e botão "Restaurar Padrão".
+8. `DashboardWidgetGrid.tsx`: Orquestração em grid com drag-and-drop e reordenação dos widgets.
+9. `useDashboardStats.ts`: Hook puro para consolidação estatística do mês.
+10. `index.ts`: Barrel export com todos os componentes e tipos.
 
-* **Critério de Sucesso:** O `DashboardView.tsx` atua apenas como o container do layout e do drag-and-drop, com menos de 200 linhas.
+* **Validação:** 69 testes unitários passando no Vitest (100% verde), 0 erros no TypeScript (`npm run lint`), `DashboardView.tsx` com 187 linhas.
 
 ---
 
