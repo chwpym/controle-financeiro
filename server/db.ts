@@ -88,10 +88,38 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 
+  CREATE TABLE IF NOT EXISTS companies (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    legal_name TEXT NOT NULL,
+    trade_name TEXT NOT NULL DEFAULT '',
+    document TEXT NOT NULL DEFAULT '',
+    state_registration TEXT NOT NULL DEFAULT '',
+    municipal_registration TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'active',
+    email TEXT NOT NULL DEFAULT '',
+    phone TEXT NOT NULL DEFAULT '',
+    whatsapp TEXT NOT NULL DEFAULT '',
+    cep TEXT NOT NULL DEFAULT '',
+    street TEXT NOT NULL DEFAULT '',
+    number TEXT NOT NULL DEFAULT '',
+    complement TEXT NOT NULL DEFAULT '',
+    neighborhood TEXT NOT NULL DEFAULT '',
+    city TEXT NOT NULL DEFAULT '',
+    state TEXT NOT NULL DEFAULT '',
+    logo_data_url TEXT NOT NULL DEFAULT '',
+    color TEXT NOT NULL DEFAULT '#0F766E',
+    is_default INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
   CREATE INDEX IF NOT EXISTS idx_tx_user_due ON transactions(user_id, due_date);
   CREATE INDEX IF NOT EXISTS idx_tx_group ON transactions(user_id, installment_group_id);
   CREATE INDEX IF NOT EXISTS idx_contacts_user ON contacts(user_id);
   CREATE INDEX IF NOT EXISTS idx_categories_user ON categories(user_id);
+  CREATE INDEX IF NOT EXISTS idx_companies_user ON companies(user_id);
 `);
 
 // Safe migrations for existing SQLite databases
@@ -113,6 +141,45 @@ if (!txColumns.some((col) => col.name === 'recurrence_interval')) {
 }
 if (!txColumns.some((col) => col.name === 'issue_date')) {
   db.exec('ALTER TABLE transactions ADD COLUMN issue_date TEXT');
+}
+
+export function seedDefaultCompanyForUser(userId: string): string {
+  const existing = db.prepare('SELECT id FROM companies WHERE user_id = ? LIMIT 1').get(userId) as { id: string } | undefined;
+  if (existing) return existing.id;
+
+  const now = new Date().toISOString();
+  const companyId = crypto.randomUUID();
+  db.prepare(`
+    INSERT INTO companies (
+      id, user_id, legal_name, trade_name, document, state_registration,
+      municipal_registration, status, email, phone, whatsapp, cep, street,
+      number, complement, neighborhood, city, state, logo_data_url, color,
+      is_default, created_at, updated_at
+    ) VALUES (
+      ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '#0F766E', 1, ?, ?
+    )
+  `).run(
+    companyId,
+    userId,
+    'Minha Empresa Principal Ltda',
+    'Minha Empresa Principal',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    now,
+    now
+  );
+  return companyId;
 }
 
 export function seedDefaultCategoriesForUser(userId: string): Record<string, string> {
@@ -150,6 +217,7 @@ export function ensureMasterSeed(): void {
   `).run(masterId, 'master', 'Administrador Master', hashPassword('master123'), now, now);
 
   const catIds = seedDefaultCategoriesForUser(masterId);
+  seedDefaultCompanyForUser(masterId);
 
   // Seed clean initial contacts and sample monthly entries for immediate dashboard visualization
   const c1 = crypto.randomUUID();
@@ -230,3 +298,13 @@ export function ensureMasterSeed(): void {
 
 // Auto-seed on startup
 ensureMasterSeed();
+
+// Ensure existing users have at least one company
+try {
+  const existingUsers = db.prepare('SELECT id FROM users').all() as { id: string }[];
+  for (const u of existingUsers) {
+    seedDefaultCompanyForUser(u.id);
+  }
+} catch {
+  // Safe fallback
+}

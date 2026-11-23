@@ -9,6 +9,7 @@ import authRouter from './server/routes/auth';
 import backupRouter from './server/routes/backup';
 import bootstrapRouter from './server/routes/bootstrap';
 import categoryRouter from './server/routes/categories';
+import companyRouter from './server/routes/companies';
 import contactRouter from './server/routes/contacts';
 import transactionRouter from './server/routes/transactions';
 
@@ -29,6 +30,7 @@ app.use('/api', bootstrapRouter);
 app.use('/api/transactions', transactionRouter);
 app.use('/api/contacts', contactRouter);
 app.use('/api/categories', categoryRouter);
+app.use('/api/companies', companyRouter);
 app.use('/api/backup', backupRouter);
 app.use('/api/admin', adminRouter);
 

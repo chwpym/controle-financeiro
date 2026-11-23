@@ -2,6 +2,8 @@ import type {
   AdminSummary,
   AdminUserRow,
   Category,
+  Company,
+  CompanyStatus,
   Contact,
   LocalBackupPayload,
   Transaction,
@@ -131,6 +133,39 @@ export const api = {
     return request<{ ok: boolean }>('/api/backup/restore', {
       method: 'POST',
       body: JSON.stringify(payload),
+    });
+  },
+
+  // Multi-Company Management
+  getCompanies() {
+    return request<{ companies: Company[] }>('/api/companies');
+  },
+  createCompany(payload: Partial<Company>) {
+    return request<{ company: Company }>('/api/companies', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+  updateCompany(id: string, payload: Partial<Company>) {
+    return request<{ company: Company }>(`/api/companies/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+  updateCompanyStatus(id: string, status?: CompanyStatus) {
+    return request<{ company: Company }>(`/api/companies/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+  },
+  setCompanyDefault(id: string) {
+    return request<{ company: Company }>(`/api/companies/${id}/default`, {
+      method: 'PATCH',
+    });
+  },
+  deleteCompany(id: string) {
+    return request<{ ok: boolean }>(`/api/companies/${id}`, {
+      method: 'DELETE',
     });
   },
 

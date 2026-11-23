@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Bell,
+  Building2,
   Check,
   Download,
   Edit2,
@@ -12,6 +13,7 @@ import {
   Plus,
   Search,
   Shield,
+  SlidersHorizontal,
   Sun,
   Trash2,
   X,
@@ -19,6 +21,7 @@ import {
 import type { Category, CategoryType, Contact, LocalBackupPayload, Transaction, UserRole } from '../types';
 import { downloadLocalBackup, parseLocalBackupFile } from '../utils/exporters';
 import { PWAInstallButton } from './PWAInstallButton';
+import { CompaniesSettingsTab } from './settings/CompaniesSettingsTab';
 
 interface SettingsViewProps {
   userId: string;
@@ -97,6 +100,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [backupMessage, setBackupMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
   const [restoring, setRestoring] = useState(false);
   const [notifySavedMsg, setNotifySavedMsg] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<'companies' | 'general'>('companies');
 
   const LEAD_DAY_PRESETS = [
     { value: 0, label: 'No dia' },
@@ -220,7 +224,46 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const roleName = userRole === 'master' ? 'Master' : userRole === 'admin' ? 'Administrador' : 'Usuário';
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+    <div className="space-y-6">
+      {/* Settings Navigation Tabs */}
+      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3" data-testid="settings-tabs">
+        <button
+          type="button"
+          onClick={() => setSettingsTab('companies')}
+          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+            settingsTab === 'companies'
+              ? 'bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 border border-teal-200/80 dark:border-teal-800/80 shadow-2xs'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
+          }`}
+        >
+          <Building2 className="w-4 h-4" />
+          <span>Minhas Empresas</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setSettingsTab('general')}
+          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+            settingsTab === 'general'
+              ? 'bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 border border-teal-200/80 dark:border-teal-800/80 shadow-2xs'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
+          }`}
+        >
+          <SlidersHorizontal className="w-4 h-4" />
+          <span>Categorias & Preferências</span>
+        </button>
+      </div>
+
+      {settingsTab === 'companies' ? (
+        <CompaniesSettingsTab
+          onNotify={(msg, type) => {
+            if (type === 'error') {
+              setBackupMessage({ kind: 'error', text: msg });
+            }
+          }}
+        />
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
       {/* Left column: Customizable Categories with usage filter & full color controls */}
       <div className="lg:col-span-7 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-5">
         <div>
@@ -804,6 +847,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         </div>
       </div>
+    </div>
+      )}
     </div>
   );
 };

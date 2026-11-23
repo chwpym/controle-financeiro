@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import express from 'express';
 import type { Request, Response } from 'express';
-import { db, seedDefaultCategoriesForUser } from '../db';
+import { db, seedDefaultCategoriesForUser, seedDefaultCompanyForUser } from '../db';
 import {
   hashPassword,
   verifyPassword,
@@ -71,6 +71,7 @@ router.post('/register', (req: Request, res: Response): void => {
   `).run(userId, username, displayName, hashPassword(password), now, now, now);
 
   seedDefaultCategoriesForUser(userId);
+  seedDefaultCompanyForUser(userId);
   const created = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as DbUser;
 
   res.status(201).json({

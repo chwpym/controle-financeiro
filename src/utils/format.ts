@@ -131,6 +131,35 @@ export function maskCNPJ(value: string): string {
   return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
 }
 
+/**
+ * Validação matemática oficial dos 14 dígitos do CNPJ
+ * incluindo verificação de repetições e dos dois dígitos verificadores (módulo 11).
+ */
+export function isValidCNPJ(value: string | null | undefined): boolean {
+  if (!value) return false;
+  const digits = value.replace(/\D/g, '');
+  if (digits.length !== 14) return false;
+  if (/^(\d)\1{13}$/.test(digits)) return false;
+
+  const weights1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+  let sum1 = 0;
+  for (let i = 0; i < 12; i++) {
+    sum1 += Number(digits[i]) * weights1[i];
+  }
+  const rem1 = sum1 % 11;
+  const d1 = rem1 < 2 ? 0 : 11 - rem1;
+  if (d1 !== Number(digits[12])) return false;
+
+  const weights2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+  let sum2 = 0;
+  for (let i = 0; i < 13; i++) {
+    sum2 += Number(digits[i]) * weights2[i];
+  }
+  const rem2 = sum2 % 11;
+  const d2 = rem2 < 2 ? 0 : 11 - rem2;
+  return d2 === Number(digits[13]);
+}
+
 export const PAYMENT_METHODS = [
   'PIX',
   'Dinheiro',

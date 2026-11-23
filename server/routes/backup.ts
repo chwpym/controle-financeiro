@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import express from 'express';
 import type { Response } from 'express';
-import { db } from '../db';
+import { db, seedDefaultCompanyForUser } from '../db';
 import { requireAuth, type AuthedRequest } from '../middleware/auth';
 
 const router = express.Router();
@@ -45,12 +45,28 @@ router.get('/export', (req: AuthedRequest, res: Response): void => {
     recurrenceInterval: row.recurrenceInterval || null,
   }));
 
+  const rawCompanies = db.prepare(`
+    SELECT id, user_id as userId, legal_name as legalName, trade_name as tradeName,
+      document, state_registration as stateRegistration,
+      municipal_registration as municipalRegistration, status,
+      email, phone, whatsapp, cep, street, number, complement,
+      neighborhood, city, state, logo_data_url as logoDataUrl,
+      color, is_default as isDefault, created_at as createdAt, updated_at as updatedAt
+    FROM companies WHERE user_id = ? ORDER BY is_default DESC, created_at ASC
+  `).all(uid) as Array<Record<string, unknown>>;
+
+  const companies = rawCompanies.map((c) => ({
+    ...c,
+    isDefault: Boolean(c.isDefault),
+  }));
+
   res.json({
     version: '1.0',
     exportedAt: new Date().toISOString(),
     categories,
     contacts,
     transactions,
+    companies,
   });
 });
 
@@ -152,9 +168,48 @@ router.post('/restore', (req: AuthedRequest, res: Response): void => {
         String(t.updatedAt || now)
       );
     }
+
+    if (Array.isArray(payload.companies) && payload.companies.length > 0) {
+      const upsertCompany = db.prepare(`
+        INSERT OR REPLACE INTO companies (
+          id, user_id, legal_name, trade_name, document, state_registration,
+          municipal_registration, status, email, phone, whatsapp, cep, street,
+          number, complement, neighborhood, city, state, logo_data_url,
+          color, is_default, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const comp of payload.companies) {
+        upsertCompany.run(
+          String(comp.id || crypto.randomUUID()),
+          uid,
+          String(comp.legalName || 'Minha Empresa'),
+          String(comp.tradeName || ''),
+          String(comp.document || ''),
+          String(comp.stateRegistration || ''),
+          String(comp.municipalRegistration || ''),
+          comp.status === 'inactive' ? 'inactive' : 'active',
+          String(comp.email || ''),
+          String(comp.phone || ''),
+          String(comp.whatsapp || ''),
+          String(comp.cep || ''),
+          String(comp.street || ''),
+          String(comp.number || ''),
+          String(comp.complement || ''),
+          String(comp.neighborhood || ''),
+          String(comp.city || ''),
+          String(comp.state || ''),
+          String(comp.logoDataUrl || ''),
+          String(comp.color || '#0F766E'),
+          comp.isDefault ? 1 : 0,
+          String(comp.createdAt || now),
+          String(comp.updatedAt || now)
+        );
+      }
+    }
   });
 
   restoreTx();
+  seedDefaultCompanyForUser(uid);
   res.json({ ok: true });
 });
 

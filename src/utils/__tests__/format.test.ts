@@ -12,6 +12,7 @@ import {
   maskCEP,
   maskCPF,
   maskCNPJ,
+  isValidCNPJ,
   isOverdue,
   daysUntilDue,
   buildInstallmentTransactions,
@@ -861,6 +862,24 @@ describe('renegotiateInstallmentGroup', () => {
     expect(newTxs[1].dueDate).toBe('2027-01-15');
     expect(newTxs[2].dueDate).toBe('2027-02-15');
     expect(newTxs[3].dueDate).toBe('2027-03-15');
+  });
+
+  describe('isValidCNPJ', () => {
+    it('validates authentic CNPJs with and without formatting', () => {
+      expect(isValidCNPJ('00.000.000/0001-91')).toBe(true); // Banco do Brasil
+      expect(isValidCNPJ('00000000000191')).toBe(true);
+      expect(isValidCNPJ('33.000.167/0001-01')).toBe(true); // Petrobras
+      expect(isValidCNPJ('11.222.333/0001-81')).toBe(true);
+    });
+
+    it('rejects invalid CNPJs, wrong length, repeated digits, or incorrect check digits', () => {
+      expect(isValidCNPJ('')).toBe(false);
+      expect(isValidCNPJ('123')).toBe(false);
+      expect(isValidCNPJ('00.000.000/0000-00')).toBe(false);
+      expect(isValidCNPJ('11.111.111/1111-11')).toBe(false);
+      expect(isValidCNPJ('00.000.000/0001-90')).toBe(false); // Wrong 2nd digit
+      expect(isValidCNPJ('12.345.678/0001-90')).toBe(false); // Wrong check digits
+    });
   });
 });
 

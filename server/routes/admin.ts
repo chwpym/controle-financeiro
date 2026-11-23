@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import express from 'express';
 import type { Response } from 'express';
-import { db, seedDefaultCategoriesForUser } from '../db';
+import { db, seedDefaultCategoriesForUser, seedDefaultCompanyForUser } from '../db';
 import {
   hashPassword,
   mapUser,
@@ -82,6 +82,7 @@ router.post('/users', (req: AuthedRequest, res: Response): void => {
   `).run(id, username, displayName, hashPassword(password), role, now, now);
 
   seedDefaultCategoriesForUser(id);
+  seedDefaultCompanyForUser(id);
   const created = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as DbUser;
   res.status(201).json({ user: mapUser(created) });
 });

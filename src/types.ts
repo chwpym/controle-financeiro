@@ -27,6 +27,34 @@ export interface AdminSummary {
 
 export type CategoryType = 'payable' | 'receivable' | 'both';
 
+export type CompanyStatus = 'active' | 'inactive';
+
+export interface Company {
+  id: string;
+  userId: string;
+  legalName: string; // Razão Social
+  tradeName: string; // Nome Fantasia
+  document: string; // CNPJ formatado
+  stateRegistration: string; // Inscrição Estadual
+  municipalRegistration: string; // Inscrição Municipal
+  status: CompanyStatus; // 'active' | 'inactive'
+  email: string;
+  phone: string;
+  whatsapp: string;
+  cep: string;
+  street: string;
+  number: string;
+  complement: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+  logoDataUrl: string; // Base64 da logo (PNG, JPG, WebP, SVG)
+  color: string; // Cor da tag de identificação (ex: '#0F766E')
+  isDefault: boolean; // Se é a empresa padrão principal
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Category {
   id: string;
   userId: string;
@@ -94,13 +122,14 @@ export interface Transaction {
 }
 
 export interface LocalBackupPayload {
-  version: number;
+  version: number | string;
   app: 'FluxoClaro';
   exportedAt: string;
   username: string;
   categories: Category[];
   contacts: Contact[];
   transactions: Transaction[];
+  companies?: Company[];
 }
 
 export type SyncMutationKind =

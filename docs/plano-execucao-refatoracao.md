@@ -195,14 +195,17 @@ Transformar o **FluxoClaro** em um sistema financeiro modular, de fácil manuten
 
 Permitir a gestão de múltiplos CNPJs (Matriz, Filiais ou diferentes negócios) com visão financeira individual ou consolidada, logotipo próprio por empresa para recibos, controle de permissões por usuário (com clonagem) e Drawer lateral de avisos:
 
-### Etapa 9.1: Entidade Empresa, Status Ativo/Inativo, CRUD Backend e Configurações
+### ✅ Etapa 9.1: Concluída com Sucesso (Entidade Empresa, Status Ativo/Inativo, CRUD Backend e Configurações)
 - **Modelo `Company` em `src/types.ts` e SQLite (`server/db.ts`):**
   - Campos: `id`, `user_id`, `legalName` (Razão Social), `tradeName` (Nome Fantasia), `document` (CNPJ com validação matemática), `stateRegistration`, `municipalRegistration`, `status` (`'active'` | `'inactive'`), `email`, `phone`, `whatsapp`, endereço completo (ViaCEP), `logoDataUrl`, `color` (tag visual) e `isDefault`.
+  - Função de seed automático `seedDefaultCompanyForUser` garantindo ao menos uma empresa padrão ativa.
 - **Rotas Backend em `server/routes/companies.ts`:**
-  - `GET /api/companies`, `POST /api/companies`, `PUT /api/companies/:id`, `PATCH /api/companies/:id/status`, `PATCH /api/companies/:id/default`, `DELETE /api/companies/:id`.
+  - `GET /api/companies`, `POST /api/companies`, `PUT /api/companies/:id`, `PATCH /api/companies/:id/status`, `PATCH /api/companies/:id/default`, `DELETE /api/companies/:id` (com proteção de última empresa).
+  - Integrado a `server.ts` e suporte a backup/restore em `server/routes/backup.ts`.
 - **Tela de Gestão de Empresas em Configurações (`CompaniesSettingsTab.tsx`):**
   - Listagem de empresas em cards com badges de status (Ativa/Inativa), cor da tag, badge "Empresa Padrão" e logo em miniatura.
-  - Drawer/Modal de cadastro e edição no padrão do `ContactDrawer.tsx`: campos organizados em abas limpas (Geral, Endereço ViaCEP, Contatos Fiscais), toggle Ativa/Inativa, upload de logo com preview e validação de CNPJ.
+  - Drawer de cadastro e edição no padrão do `ContactDrawer.tsx`: abas "1. Geral & Contato" e "2. Endereço Completo", toggle Ativa/Inativa, upload de logo Base64 com preview e busca de CEP automática.
+- **Validação:** 94 testes passando no Vitest (100% verde), 0 erros no lint.
 
 ### Etapa 9.2: Vínculo de Contas, Seletor Global, Recibos PDF e Drawer de Avisos
 - **Migration Segura em `transactions`:**
