@@ -224,7 +224,7 @@ Permitir a gestão de múltiplos CNPJs (Matriz, Filiais ou diferentes negócios)
 - **Regras de Visualização:**
   - Usuários `master` e `admin`: Acesso irrestrito a todas as empresas ativas e à visão consolidada.
   - Usuários operacionais (`user`): Acesso restrito apenas aos CNPJs autorizados no cadastro.
-- **Clonagem Rápida de Usuário (Inspirado no Certtus):**
+- **Clonagem Rápida de Usuário:**
   - Botão `[ 📋 Copiar de Outro Usuário ]` no modal de cadastro para herdar empresas liberadas e regras de acesso com 1 clique.
 - **Trava de Segurança:**
   - Checkbox de permissão `[✓] Pode excluir lançamentos`: desmarcado por padrão para operadores, impedindo que contas sejam apagadas sem autorização do gerente.
