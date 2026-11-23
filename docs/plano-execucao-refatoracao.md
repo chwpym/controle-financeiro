@@ -20,6 +20,10 @@ Transformar o **FluxoClaro** em um sistema financeiro modular, de fácil manuten
 [✅ Fase 5: Risco Médio]      -> Decomposição do Dashboard em cards modulares
 [✅ Fase 6: Backend Limpo]    -> Separação do server.ts em arquitetura em camadas modular
 [✅ Fase 7: XML Avançado]     -> Importação de NF-e (Compra/Venda), NFS-e e Modularização
+[⏳ Fase 8: Excel Modular]    -> Importação Excel com Drag-and-Drop nativo e Decomposição (< 200 linhas)
+[📋 Fase 9: Minha Empresa]    -> Cadastro da Empresa Emitente e Logotipo dinâmico nos Recibos
+[📋 Fase 10: Licenciamento]   -> Trava por tempo de uso, chave criptografada e tela de liberação
+[📋 Fase 11: Telas Restantes] -> Modularização de Contatos, Configurações, Relatórios e Renegociação
 ```
 
 ---
@@ -153,6 +157,60 @@ Transformar o **FluxoClaro** em um sistema financeiro modular, de fácil manuten
 4. **Validação:**
    - `npm test`: **78 testes passando (100% verde)** em 8 arquivos de teste.
    - `npm run lint`: **0 erros de TypeScript**.
+
+---
+
+## ⏳ FASE 8: Modularização & Drag-and-Drop do Importador Excel
+
+Reduzir `ExcelImportModal.tsx` de **824 linhas para menos de 200 linhas**, criando submódulos coesos sob `src/components/excel-import/`:
+
+### Submódulos a Criar:
+1. `ExcelDropzone.tsx`:
+   - Área com suporte nativo a **Drag-and-Drop** (`onDragOver`, `onDragLeave`, `onDrop`) aceitando arquivos `.xlsx`, `.xls` e `.csv` diretamente do Windows Explorer sem precisar abrir a caixa de diálogo de arquivos.
+   - Feedback visual imediato de arraste (borda destacada teal, fundo diferenciado e texto dinâmico).
+   - Botão para download da planilha modelo (`downloadExcelImportTemplate`).
+2. `ExcelSheetSelector.tsx`:
+   - Barra de seleção de aba da planilha (quando o arquivo contém múltiplas abas).
+3. `ExcelMappingTable.tsx`:
+   - Tabela de mapeamento de colunas com toggles opcionais/obrigatórios (Descrição, Vencimento, Valor, Tipo, Situação, Forma de Pagamento, Categoria, Contato, NF/Documento e Observações).
+4. `ExcelDefaultsForm.tsx`:
+   - Seleção de valores padrão para campos não mapeados (Tipo padrão, Situação padrão, Categoria padrão e Contato padrão).
+5. `ExcelPreviewTable.tsx`:
+   - Pré-visualização dos lançamentos gerados com checkboxes de inclusão/exclusão, detecção de contatos novos com botão de autocadastro em lote e totalizadores em BRL (`font-mono-tabular`).
+6. `useExcelImport.ts`:
+   - Hook desacoplado com estado da planilha, análise de colunas, parsing e handlers de submissão.
+7. `index.ts`: Barrel export.
+8. `ExcelImportModal.tsx`: Orquestrador com menos de 200 linhas.
+9. Suíte de testes unitários em `src/components/excel-import/__tests__/excel-import-components.test.tsx`.
+
+---
+
+## 📋 FASE 9: Cadastro da Empresa Emitente ("Minha Empresa") & Logotipo Dinâmico
+
+Permitir que o gestor configure os dados oficiais da sua empresa e envie a logo da marca para os recibos impressos e relatórios:
+- Formulário em Configurações com Razão Social, Fantasia, CNPJ (com validação matemática), IE, IM, Endereço completo com ViaCEP, Telefone e WhatsApp.
+- Upload de Logo (PNG, JPG, WebP, SVG) com pré-visualização e armazenamento seguro.
+- Inserção dinâmica no cabeçalho do recibo emitido (`TransactionDetailModal` / `ReceiptPDF`).
+
+---
+
+## 📋 FASE 10: Sistema de Licenciamento & Trava por Tempo de Uso
+
+Implementar proteção e gestão de licença para comercialização do software (SaaS / On-Premise):
+- Token de licença criptografado assinado (HMAC/AES) com expiração, CNPJ e módulos ativos.
+- Alerta preventivo com contagem regressiva quando a licença estiver próxima do vencimento.
+- Bloqueio de ações de escrita ao expirar com redirecionamento para tela de Liberação.
+- Modal/Tela de Liberação para colar nova chave de ativação sem interrupção de dados.
+
+---
+
+## 📋 FASE 11: Modularização das Telas Restantes
+
+Decomposição dos componentes restantes que ainda excedem 500 linhas:
+- `ContactsView.tsx` (567 linhas) e `ContactDrawer.tsx` (559 linhas).
+- `SettingsView.tsx` (809 linhas).
+- `ReportsView.tsx` (530 linhas).
+- `InstallmentManagerModal.tsx` (700 linhas).
 
 ---
 

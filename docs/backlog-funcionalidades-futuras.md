@@ -1,10 +1,34 @@
-# 📋 Backlog de Funcionalidades Futuras — FluxoClaro
+# 📋 Backlog de Funcionalidades Futuras & Roadmap Estratégico — FluxoClaro
 
-Este documento consolida os requisitos de negócio e funcionalidades estratégicas solicitadas para as próximas fases do produto, garantindo que nada se perca entre as sessões.
+Este documento consolida os requisitos de negócio, funcionalidades estratégicas e melhorias arquiteturais para as próximas fases do produto, garantindo rastreabilidade e alinhamento entre produto e engenharia.
 
 ---
 
-## 🏢 1. Cadastro da Empresa Emitente ("Minha Empresa")
+## 🗺️ Visão Geral das Próximas Fases
+
+| Fase | Título | Objetivo Principal | Status |
+| :--- | :--- | :--- | :--- |
+| **Fase 8** | **Módulo Excel Avançado & Drag-and-Drop** | Upload por arraste nativo, mapeamento flexível e redução de `ExcelImportModal.tsx` de 824 para < 200 linhas | ⏳ Pronta para Início |
+| **Fase 9** | **Cadastro da Empresa & Logotipo** | Identificação oficial da empresa (CNPJ, IE, Endereço ViaCEP) e logo nos Recibos PDF | 📋 Planejada |
+| **Fase 10** | **Licenciamento & Trava por Tempo de Uso** | Proteção de licença comercial, token assinado, aviso prévio e tela de liberação | 📋 Planejada |
+| **Fase 11** | **Modularização das Telas Restantes** | Decomposição de Contatos, Configurações, Relatórios e Renegociação | 📋 Planejada |
+
+---
+
+## 📊 0. Importador Excel Modular com Drag-and-Drop Nativo (Fase 8)
+**Objetivo:** Permitir que o usuário arraste uma planilha Excel/CSV diretamente para a tela sem abrir caixas de diálogo do Windows, com feedback visual moderno e modularização completa em submódulos sob `src/components/excel-import/`.
+
+### Requisitos:
+* **Drag-and-Drop Nativo:** Suporte completo aos eventos `onDragOver`, `onDragLeave` e `onDrop` em `ExcelDropzone.tsx`. Ao soltar o arquivo `.xlsx`, `.xls` ou `.csv`, ele é processado instantaneamente em memória sem abrir o explorador de arquivos.
+* **Seleção de Abas:** Suporte dinâmico a planilhas multi-abas via `ExcelSheetSelector.tsx`.
+* **Mapeamento Flexível:** Tabela interativa para associar colunas com toggles opcionais (`ExcelMappingTable.tsx`).
+* **Valores Padrão:** Formulário de fallback para valores não preenchidos (`ExcelDefaultsForm.tsx`).
+* **Pré-visualização e Autocadastro:** Tabela de conferência (`ExcelPreviewTable.tsx`) com detecção de contatos novos e autocadastro em lote.
+* **Componente Orquestrador Enxuto:** `ExcelImportModal.tsx` com menos de 200 linhas.
+
+---
+
+## 🏢 1. Cadastro da Empresa Emitente ("Minha Empresa") (Fase 9)
 **Objetivo:** Permitir que o gestor configure os dados completos da sua empresa para emissão oficial de recibos em PDF, orçamentos e relatórios gerenciais.
 
 ### Campos Necessários:
@@ -26,7 +50,7 @@ Este documento consolida os requisitos de negócio e funcionalidades estratégic
 
 ---
 
-## 🖼️ 2. Upload do Logotipo da Empresa
+## 🖼️ 2. Upload do Logotipo da Empresa (Fase 9)
 **Objetivo:** Personalizar a identidade visual do sistema e dos documentos emitidos para os clientes.
 
 ### Requisitos:
@@ -37,7 +61,7 @@ Este documento consolida os requisitos de negócio e funcionalidades estratégic
 
 ---
 
-## 🔐 3. Licenciamento, Chave de Ativação e Trava por Tempo de Uso
+## 🔐 3. Licenciamento, Chave de Ativação e Trava por Tempo de Uso (Fase 10)
 **Objetivo:** Mecanismo de liberação e controle de licença de uso do software (SaaS / Desktop / On-Premise), com bloqueio automático após o vencimento do prazo acordado.
 
 ### Requisitos:
@@ -55,4 +79,13 @@ Este documento consolida os requisitos de negócio e funcionalidades estratégic
 
 ---
 
-*Documento registrado em 18/11/2026 como referência de produto.*
+## 🧱 4. Modularização das Telas Restantes (Fase 11)
+**Objetivo:** Concluir a decomposição arquitetural das telas que ainda possuem mais de 500 linhas, garantindo manutenibilidade e escalabilidade futura:
+* `ContactsView.tsx` e `ContactDrawer.tsx` -> Submódulos em `src/components/contacts/`
+* `SettingsView.tsx` -> Submódulos em `src/components/settings/`
+* `ReportsView.tsx` -> Submódulos em `src/components/reports/`
+* `InstallmentManagerModal.tsx` -> Submódulos em `src/components/installment-manager/`
+
+---
+
+*Atualizado em 23/11/2026 para alinhamento com o Plano Mestre de Execução e Arquitetura Ponytail.*
