@@ -191,21 +191,20 @@ Transformar o **FluxoClaro** em um sistema financeiro modular, de fácil manuten
 
 ---
 
-## 📋 FASE 9: Multi-Empresas ("Minhas Empresas"), Visão Consolidada, Logotipos e Permissões
+## 📋 FASE 9: Multi-Empresas ("Minhas Empresas"), Visão Consolidada, Logotipos, Permissões e Drawer de Avisos
 
-Permitir a gestão de múltiplos CNPJs (Matriz, Filiais ou diferentes negócios) com visão financeira individual ou consolidada, logotipo próprio por empresa para recibos e controle de permissões por usuário:
+Permitir a gestão de múltiplos CNPJs (Matriz, Filiais ou diferentes negócios) com visão financeira individual ou consolidada, logotipo próprio por empresa para recibos, controle de permissões por usuário (com clonagem) e Drawer lateral de avisos:
 
-### Etapa 9.1: Entidade Empresa, CRUD Backend e Configurações
+### Etapa 9.1: Entidade Empresa, Status Ativo/Inativo, CRUD Backend e Configurações
 - **Modelo `Company` em `src/types.ts` e SQLite (`server/db.ts`):**
-  - Campos: `id`, `user_id`, `legalName` (Razão Social), `tradeName` (Nome Fantasia), `document` (CNPJ com validação matemática), `stateRegistration`, `municipalRegistration`, `email`, `phone`, `whatsapp`, endereço completo (ViaCEP), `logoDataUrl`, `color` (tag visual) e `isDefault`.
+  - Campos: `id`, `user_id`, `legalName` (Razão Social), `tradeName` (Nome Fantasia), `document` (CNPJ com validação matemática), `stateRegistration`, `municipalRegistration`, `status` (`'active'` | `'inactive'`), `email`, `phone`, `whatsapp`, endereço completo (ViaCEP), `logoDataUrl`, `color` (tag visual) e `isDefault`.
 - **Rotas Backend em `server/routes/companies.ts`:**
-  - `GET /api/companies`, `POST /api/companies`, `PUT /api/companies/:id`, `DELETE /api/companies/:id`.
+  - `GET /api/companies`, `POST /api/companies`, `PUT /api/companies/:id`, `PATCH /api/companies/:id/status`, `PATCH /api/companies/:id/default`, `DELETE /api/companies/:id`.
 - **Tela de Gestão de Empresas em Configurações (`CompaniesSettingsTab.tsx`):**
-  - Listagem de empresas cadastradas com badges coloridos e logo em miniatura.
-  - Modal/Drawer de cadastro e edição com upload de logo (preview em tempo real), busca de CEP automática e validação de CNPJ.
-  - Definição da Empresa Padrão.
+  - Listagem de empresas em cards com badges de status (Ativa/Inativa), cor da tag, badge "Empresa Padrão" e logo em miniatura.
+  - Drawer/Modal de cadastro e edição no padrão do `ContactDrawer.tsx`: campos organizados em abas limpas (Geral, Endereço ViaCEP, Contatos Fiscais), toggle Ativa/Inativa, upload de logo com preview e validação de CNPJ.
 
-### Etapa 9.2: Vínculo de Contas, Seletor Global e Recibos PDF
+### Etapa 9.2: Vínculo de Contas, Seletor Global, Recibos PDF e Drawer de Avisos
 - **Migration Segura em `transactions`:**
   - Adição da coluna `company_id TEXT` (retrocompatível, transações antigas usam a empresa padrão ou modo consolidado).
 - **Seletor Global no Header (`CompanySelector.tsx`):**
@@ -217,11 +216,18 @@ Permitir a gestão de múltiplos CNPJs (Matriz, Filiais ou diferentes negócios)
   - Filtro por empresa e consolidação financeira global.
 - **Recibos Dinâmicos (`TransactionDetailModal.tsx` / `ReceiptPDF`):**
   - Cabeçalho do recibo renderiza o logotipo, dados fiscais e contatos da empresa proprietária daquele lançamento.
+- **Evolução do Painel de Avisos (`[ 🔔 AVISOS ]` + `AlertsDrawer.tsx`):**
+  - O popover do sininho exibe os alertas urgentes com limite compacto (3 a 5 itens) filtrados pela empresa selecionada.
+  - Link *"Ver todos os avisos"* abre um **Drawer lateral deslizante (Slide-over da direita)** idêntico ao `ContactDrawer.tsx`, com a lista completa de contas vencidas e a vencer, filtros rápidos e botões de baixa imediata (`Pagar` / `Receber`).
 
-### Etapa 9.3: Controle de Acesso e Permissões por Empresa (RBAC)
+### Etapa 9.3: Controle de Acesso, Clonagem de Permissões e Trava de Exclusão (RBAC)
 - **Regras de Visualização:**
-  - Usuários `master` e `admin`: Acesso irrestrito a todas as empresas e à visão consolidada.
-  - Usuários operacionais (`user`): Podem ter restrição de acesso configurada no Painel Admin (`server/routes/admin.ts`), enxergando apenas os CNPJs aos quais têm permissão de visualização e movimentação financeira.
+  - Usuários `master` e `admin`: Acesso irrestrito a todas as empresas ativas e à visão consolidada.
+  - Usuários operacionais (`user`): Acesso restrito apenas aos CNPJs autorizados no cadastro.
+- **Clonagem Rápida de Usuário (Inspirado no Certtus):**
+  - Botão `[ 📋 Copiar de Outro Usuário ]` no modal de cadastro para herdar empresas liberadas e regras de acesso com 1 clique.
+- **Trava de Segurança:**
+  - Checkbox de permissão `[✓] Pode excluir lançamentos`: desmarcado por padrão para operadores, impedindo que contas sejam apagadas sem autorização do gerente.
 
 ---
 

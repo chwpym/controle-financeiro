@@ -28,12 +28,12 @@ Este documento consolida os requisitos de negócio, funcionalidades estratégica
 
 ---
 
-## 🏢 1. Multi-Empresas ("Minhas Empresas"), Visão Consolidada e Logotipos (Fase 9)
+## 🏢 1. Multi-Empresas ("Minhas Empresas"), Visão Consolidada, Logotipos e Permissões (Fase 9)
 **Objetivo:** Permitir que o gestor cadastre e gerencie múltiplos CNPJs/Empresas (Matriz, Filiais ou empresas de diferentes segmentos), possibilitando visualizar o fluxo financeiro de forma individual ou consolidada em todo o sistema.
 
 ### Requisitos Estratégicos:
-* **Multi-CNPJ:**
-  * Cadastro completo de cada empresa: Razão Social, Nome Fantasia, CNPJ (com validação matemática), IE, IM, Endereço completo (ViaCEP), Telefone, WhatsApp, E-mail e cor de identificação visual.
+* **Multi-CNPJ com Status Ativo/Inativo:**
+  * Cadastro completo de cada empresa: Razão Social, Nome Fantasia, CNPJ (com validação matemática), IE, IM, Endereço completo (ViaCEP), Telefone, WhatsApp, E-mail, cor de identificação visual e status (`Ativa` / `Inativa`).
   * Upload de Logotipo individual por empresa (PNG, JPG, WebP, SVG) para impressão de recibos com identidade visual própria.
 * **Visão Consolidada vs. Individual (Seletor Global no Header):**
   * Seletor de empresa no topo do sistema: permite alternar para uma empresa específica ou para `🌐 Todas as Empresas (Visão Consolidada)`.
@@ -41,9 +41,14 @@ Este documento consolida os requisitos de negócio, funcionalidades estratégica
 * **Vínculo por Lançamento:**
   * Cada conta a pagar/receber registra qual empresa do grupo é responsável (`company_id`).
   * Na listagem, tags visuais identificam rapidamente a empresa da conta.
-* **Controle de Acesso e Permissões por Usuário (RBAC):**
+* **Painel de Avisos Dinâmico e Drawer Lateral (`AlertsDrawer.tsx`):**
+  * O botão `[ 🔔 AVISOS ]` abre o popover rápido com as contas urgentes (limite de 3 a 5 itens) filtradas pela empresa ativa.
+  * Ao clicar em *"Ver todos os avisos"*, abre um **Drawer lateral (Slide-over da direita)** idêntico ao `ContactDrawer.tsx`, exibindo a lista completa de contas vencidas e a vencer com filtros e botões de baixa imediata (`Pagar` / `Receber`).
+* **Controle de Acesso, Clonagem e Permissões por Usuário (RBAC):**
   * `Master` e `Admin`: têm acesso irrestrito a todas as empresas do grupo e à visão consolidada.
-  * `User` (Operacional): pode ter seu acesso restrito apenas às empresas autorizadas pelo administrador. Usuários sem permissão não visualizam contas, relatórios nem o CNPJ da empresa bloqueada.
+  * `User` (Operacional): tem seu acesso restrito apenas às empresas autorizadas pelo administrador.
+  * **Clonagem Rápida:** Botão `[ 📋 Copiar de Outro Usuário ]` para replicar permissões de funcionários existentes com 1 clique.
+  * **Trava Anti-Fraude:** Opção de desmarcar permissão de exclusão (`[✓] Pode excluir lançamentos`), impedindo que operadores apaguem histórico financeiro sem consentimento do gerente.
 
 ---
 
