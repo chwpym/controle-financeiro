@@ -123,7 +123,7 @@ export function maskCPF(value: string): string {
 }
 
 export function maskCNPJ(value: string): string {
-  const d = value.replace(/\D/g, '').slice(0, 14);
+  const d = value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 14);
   if (d.length <= 2) return d;
   if (d.length <= 5) return `${d.slice(0, 2)}.${d.slice(2)}`;
   if (d.length <= 8) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5)}`;
@@ -132,32 +132,40 @@ export function maskCNPJ(value: string): string {
 }
 
 /**
- * Validação matemática oficial dos 14 dígitos do CNPJ
- * incluindo verificação de repetições e dos dois dígitos verificadores (módulo 11).
+ * Validação matemática oficial dos 14 dígitos/caracteres do CNPJ
+ * com suporte ao padrão tradicional e ao padrão oficial Alfanumérico da RFB (IN RFB nº 2.229/2024).
+ * Posições 1 a 12: aceitam 0-9 e A-Z (char code - 48).
+ * Posições 13 e 14 (DVs): estritamente numéricas 0-9.
  */
 export function isValidCNPJ(value: string | null | undefined): boolean {
   if (!value) return false;
-  const digits = value.replace(/\D/g, '');
-  if (digits.length !== 14) return false;
-  if (/^(\d)\1{13}$/.test(digits)) return false;
+  const clean = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (clean.length !== 14) return false;
+  // Rejeita sequências repetidas de 14 caracteres idênticos
+  if (/^([A-Z0-9])\1{13}$/.test(clean)) return false;
+  // Os dois últimos caracteres (DVs) devem ser estritamente dígitos 0-9
+  if (!/^\d{2}$/.test(clean.slice(12))) return false;
 
   const weights1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
   let sum1 = 0;
   for (let i = 0; i < 12; i++) {
-    sum1 += Number(digits[i]) * weights1[i];
+    const val = clean.charCodeAt(i) - 48;
+    sum1 += val * weights1[i];
   }
   const rem1 = sum1 % 11;
   const d1 = rem1 < 2 ? 0 : 11 - rem1;
-  if (d1 !== Number(digits[12])) return false;
+  if (d1 !== Number(clean[12])) return false;
 
   const weights2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
   let sum2 = 0;
-  for (let i = 0; i < 13; i++) {
-    sum2 += Number(digits[i]) * weights2[i];
+  for (let i = 0; i < 12; i++) {
+    const val = clean.charCodeAt(i) - 48;
+    sum2 += val * weights2[i];
   }
+  sum2 += (clean.charCodeAt(12) - 48) * weights2[12];
   const rem2 = sum2 % 11;
   const d2 = rem2 < 2 ? 0 : 11 - rem2;
-  return d2 === Number(digits[13]);
+  return d2 === Number(clean[13]);
 }
 
 export const PAYMENT_METHODS = [
@@ -191,6 +199,7 @@ export function distributeCents(totalCents: number, count: number): number[] {
 
 export interface InstallmentBuildParams {
   userId: string;
+  companyId?: string | null;
   type: TransactionType;
   description: string;
   amountCents: number;
@@ -232,6 +241,7 @@ export function buildInstallmentTransactions(params: InstallmentBuildParams): Tr
     return {
       id: crypto.randomUUID(),
       userId: params.userId,
+      companyId: params.companyId || null,
       type: params.type,
       description: `${params.description.trim()}${suffix}`,
       amountCents: cents,
@@ -260,6 +270,7 @@ export function buildInstallmentTransactions(params: InstallmentBuildParams): Tr
 
 export interface RecurringBuildParams {
   userId: string;
+  companyId?: string | null;
   type: TransactionType;
   description: string;
   amountCents: number;
@@ -287,6 +298,7 @@ export function buildRecurringTransactions(params: RecurringBuildParams): Transa
     return {
       id: crypto.randomUUID(),
       userId: params.userId,
+      companyId: params.companyId || null,
       type: params.type,
       description: cleanDesc,
       amountCents: Math.max(1, params.amountCents),
@@ -454,6 +466,7 @@ export function splitSingleTransactionIntoInstallments(
     return {
       id: crypto.randomUUID(),
       userId: originalTx.userId,
+      companyId: originalTx.companyId || null,
       type: originalTx.type,
       description: `${cleanDesc}${suffix}`,
       amountCents: cents,
@@ -535,6 +548,7 @@ export function renegotiateInstallmentGroup(
     return {
       id: crypto.randomUUID(),
       userId: baseTx.userId,
+      companyId: baseTx.companyId || null,
       type: baseTx.type,
       description: `${cleanDesc} (${num}/${newTotal})`,
       amountCents: cents,

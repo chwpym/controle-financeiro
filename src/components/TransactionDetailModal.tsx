@@ -11,7 +11,7 @@ import {
   User,
   X,
 } from 'lucide-react';
-import type { Category, Contact, Transaction } from '../types';
+import type { Category, Company, Contact, Transaction } from '../types';
 import { exportTransactionReceiptPDF } from '../utils/exporters';
 import { formatBRL, formatDateBR, isOverdue, RECURRENCE_LABELS, todayISO } from '../utils/format';
 
@@ -19,6 +19,8 @@ interface TransactionDetailModalProps {
   transaction: Transaction;
   category?: Category;
   contact?: Contact;
+  company?: Company;
+  companies?: Company[];
   username: string;
   onClose: () => void;
 }
@@ -27,6 +29,8 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
   transaction: tx,
   category,
   contact,
+  company,
+  companies,
   username,
   onClose,
 }) => {
@@ -34,6 +38,26 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
   const overdue = isOverdue(tx, today);
   const isSettled = tx.status === 'settled';
   const isReceivable = tx.type === 'receivable';
+
+  const resolvedCompany =
+    company ||
+    (companies
+      ? companies.find((c) => c.id === tx.companyId) ||
+        companies.find((c) => c.isDefault) ||
+        companies[0]
+      : undefined);
+
+  const companyAddress = resolvedCompany
+    ? [
+        [resolvedCompany.street, resolvedCompany.number].filter(Boolean).join(', '),
+        resolvedCompany.complement,
+        resolvedCompany.neighborhood,
+        [resolvedCompany.city, resolvedCompany.state].filter(Boolean).join(' / '),
+        resolvedCompany.cep ? `CEP ${resolvedCompany.cep}` : '',
+      ]
+        .filter(Boolean)
+        .join(' — ')
+    : '';
 
   const statusText = isSettled
     ? isReceivable
@@ -96,6 +120,51 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
 
         {/* Read-only Content */}
         <div className="p-6 space-y-5 overflow-y-auto">
+          {/* Official Company Header */}
+          {resolvedCompany && (
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/30 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5 min-w-0">
+                {resolvedCompany.logoDataUrl ? (
+                  <img
+                    src={resolvedCompany.logoDataUrl}
+                    alt={resolvedCompany.tradeName}
+                    className="max-h-16 max-w-[130px] object-contain rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-800 p-1 shrink-0"
+                  />
+                ) : (
+                  <div
+                    className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg shrink-0 shadow-2xs"
+                    style={{ backgroundColor: resolvedCompany.color || '#0F766E' }}
+                  >
+                    {(resolvedCompany.tradeName || resolvedCompany.legalName || 'E').slice(0, 1).toUpperCase()}
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-teal-700 dark:text-teal-400">
+                    Empresa Emitente / Unidade
+                  </div>
+                  <h3 className="text-sm sm:text-base font-display font-bold text-slate-900 dark:text-white truncate">
+                    {resolvedCompany.tradeName || resolvedCompany.legalName}
+                  </h3>
+                  {resolvedCompany.legalName && resolvedCompany.tradeName && resolvedCompany.legalName !== resolvedCompany.tradeName && (
+                    <p className="text-xs text-slate-600 dark:text-slate-400 truncate">
+                      {resolvedCompany.legalName}
+                    </p>
+                  )}
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono-tabular flex flex-wrap gap-x-2.5 mt-0.5">
+                    {resolvedCompany.document && <span>CNPJ: {resolvedCompany.document}</span>}
+                    {resolvedCompany.stateRegistration && <span>IE: {resolvedCompany.stateRegistration}</span>}
+                  </div>
+                </div>
+              </div>
+
+              {companyAddress && (
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 text-left sm:text-right max-w-xs shrink-0 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-200 dark:border-slate-800">
+                  {companyAddress}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Top Highlight Box */}
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 p-4 sm:p-5 space-y-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -298,6 +367,7 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
                 transaction: tx,
                 category,
                 contact,
+                company: resolvedCompany,
                 username,
               })
             }

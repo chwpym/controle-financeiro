@@ -21,7 +21,9 @@ import { AdminView } from './components/AdminView';
 import { AnalyticsView } from './components/AnalyticsView';
 import { AuthScreen } from './components/AuthScreen';
 import { ChangePasswordModal } from './components/ChangePasswordModal';
+import { CompanySelector } from './components/common/CompanySelector';
 import { ContactsView } from './components/ContactsView';
+import { AlertsDrawer } from './components/dashboard/AlertsDrawer';
 import { DashboardView } from './components/DashboardView';
 import { ExcelImportModal } from './components/ExcelImportModal';
 import { InstallmentManagerModal } from './components/InstallmentManagerModal';
@@ -38,6 +40,7 @@ import { useOnlineStatus } from './hooks/useOnlineStatus';
 import type {
   AppView,
   Category,
+  Company,
   Contact,
   LocalBackupPayload,
   SyncMutation,
@@ -123,6 +126,8 @@ export default function App() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string | 'all'>('all');
   const [loadingData, setLoadingData] = useState(false);
 
   const [pendingCount, setPendingCount] = useState(0);
@@ -134,6 +139,7 @@ export default function App() {
   const [consultingTx, setConsultingTx] = useState<Transaction | null>(null);
   const [settlingTx, setSettlingTx] = useState<Transaction | null>(null);
   const [installmentManagerTx, setInstallmentManagerTx] = useState<Transaction | null>(null);
+  const [alertsDrawerOpen, setAlertsDrawerOpen] = useState(false);
   const [xmlModalOpen, setXmlModalOpen] = useState(false);
   const [excelModalOpen, setExcelModalOpen] = useState(false);
   const [changePassOpen, setChangePassOpen] = useState(false);
@@ -216,6 +222,7 @@ export default function App() {
       nextCats: Category[],
       nextContacts: Contact[],
       nextTxs: Transaction[],
+      nextCompanies: Company[] = [],
       syncedAt: string | null = null
     ) => {
       await saveSnapshotCache({
@@ -223,6 +230,7 @@ export default function App() {
         categories: nextCats,
         contacts: nextContacts,
         transactions: nextTxs,
+        companies: nextCompanies,
         lastSyncedAt: syncedAt,
       });
     },
@@ -287,7 +295,10 @@ export default function App() {
         setCategories(snap.categories);
         setContacts(snap.contacts);
         setTransactions(snap.transactions);
-        await persistCache(uid, snap.categories, snap.contacts, snap.transactions, snap.serverTime);
+        if (snap.companies) {
+          setCompanies(snap.companies);
+        }
+        await persistCache(uid, snap.categories, snap.contacts, snap.transactions, snap.companies || [], snap.serverTime);
 
         const remaining = await listPendingMutations(uid);
         setPendingCount(remaining.length);
@@ -332,6 +343,9 @@ export default function App() {
         setCategories(cached.categories);
         setContacts(cached.contacts);
         setTransactions(cached.transactions);
+        if (cached.companies) {
+          setCompanies(cached.companies);
+        }
       }
       const pending = await listPendingMutations(userId);
       if (active) setPendingCount(pending.length);
@@ -363,9 +377,13 @@ export default function App() {
   const dueAlerts = useMemo(() => {
     const today = todayISO();
     return transactions
-      .filter((t) => t.status === 'pending' && daysUntilDue(t.dueDate, today) <= notifyLeadDays)
+      .filter((t) => {
+        if (t.status !== 'pending') return false;
+        if (selectedCompanyId !== 'all' && t.companyId !== selectedCompanyId) return false;
+        return daysUntilDue(t.dueDate, today) <= notifyLeadDays;
+      })
       .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-  }, [transactions, notifyLeadDays]);
+  }, [transactions, notifyLeadDays, selectedCompanyId]);
 
   // Trigger browser due-date notification once per session/day when granted
   useEffect(() => {
@@ -910,31 +928,39 @@ export default function App() {
             </h1>
           </div>
 
-          {/* Month Selector */}
+          {/* Company Selector & Month Selector */}
           {(activeView === 'dashboard' ||
             activeView === 'transactions' ||
             activeView === 'analytics' ||
             activeView === 'reports') && (
-            <div className="hidden sm:flex items-center gap-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-1.5 py-1">
-              <button
-                type="button"
-                onClick={() => setSelectedMonth((m) => shiftMonthKey(m, -1))}
-                aria-label="Mês anterior"
-                className="p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <span className="px-2 text-xs font-semibold text-slate-800 dark:text-slate-200 min-w-[125px] text-center whitespace-nowrap">
-                {formatMonthLabel(selectedMonth)}
-              </span>
-              <button
-                type="button"
-                onClick={() => setSelectedMonth((m) => shiftMonthKey(m, 1))}
-                aria-label="Próximo mês"
-                className="p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
+            <div className="flex items-center gap-2">
+              <CompanySelector
+                companies={companies}
+                selectedCompanyId={selectedCompanyId}
+                onSelectCompany={setSelectedCompanyId}
+                onManageCompanies={() => setActiveView('settings')}
+              />
+              <div className="hidden sm:flex items-center gap-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-1.5 py-1">
+                <button
+                  type="button"
+                  onClick={() => setSelectedMonth((m) => shiftMonthKey(m, -1))}
+                  aria-label="Mês anterior"
+                  className="p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="px-2 text-xs font-semibold text-slate-800 dark:text-slate-200 min-w-[125px] text-center whitespace-nowrap">
+                  {formatMonthLabel(selectedMonth)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedMonth((m) => shiftMonthKey(m, 1))}
+                  aria-label="Próximo mês"
+                  className="p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           )}
 
@@ -988,6 +1014,7 @@ export default function App() {
                 setActiveView('transactions');
               }}
               onOpenSettings={() => setActiveView('settings')}
+              onOpenAlertsDrawer={() => setAlertsDrawerOpen(true)}
             />
           </div>
         </header>
@@ -1052,6 +1079,8 @@ export default function App() {
                   transactions={transactions}
                   categories={categories}
                   contacts={contacts}
+                  companies={companies}
+                  selectedCompanyId={selectedCompanyId}
                   notifyLeadDays={notifyLeadDays}
                   inAppAlertsEnabled={inAppAlertsEnabled}
                   notificationPermission={notificationPermission}
@@ -1077,6 +1106,8 @@ export default function App() {
                   transactions={transactions}
                   categories={categories}
                   contacts={contacts}
+                  companies={companies}
+                  selectedCompanyId={selectedCompanyId}
                   onOpenNew={() => {
                     setEditingTx(null);
                     setTxModalOpen(true);
@@ -1267,13 +1298,25 @@ export default function App() {
         </div>
       )}
 
-      {/* Modals */}
+      {/* Modals & Drawers */}
+      <AlertsDrawer
+        isOpen={alertsDrawerOpen}
+        onClose={() => setAlertsDrawerOpen(false)}
+        alerts={dueAlerts}
+        contacts={contacts}
+        companies={companies}
+        onQuickSettle={handleToggleSettle}
+        onOpenConsult={(tx) => setConsultingTx(tx)}
+      />
+
       {txModalOpen && (
         <TransactionModal
           userId={user.id}
           editingTransaction={editingTx}
           categories={categories}
           contacts={contacts}
+          companies={companies}
+          selectedCompanyId={selectedCompanyId}
           onClose={() => {
             setTxModalOpen(false);
             setEditingTx(null);
@@ -1308,6 +1351,7 @@ export default function App() {
           transaction={consultingTx}
           category={categories.find((c) => c.id === consultingTx.categoryId)}
           contact={contacts.find((c) => c.id === consultingTx.contactId)}
+          companies={companies}
           username={user.username}
           onClose={() => setConsultingTx(null)}
         />

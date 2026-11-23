@@ -864,7 +864,13 @@ describe('renegotiateInstallmentGroup', () => {
     expect(newTxs[3].dueDate).toBe('2027-03-15');
   });
 
-  describe('isValidCNPJ', () => {
+  describe('maskCNPJ & isValidCNPJ (Tradicional e Alfanumérico RFB)', () => {
+    it('masks traditional and alphanumeric CNPJs correctly', () => {
+      expect(maskCNPJ('12345678000195')).toBe('12.345.678/0001-95');
+      expect(maskCNPJ('12abc34501de35')).toBe('12.ABC.345/01DE-35');
+      expect(maskCNPJ('12.abc-345/01de.35')).toBe('12.ABC.345/01DE-35');
+    });
+
     it('validates authentic CNPJs with and without formatting', () => {
       expect(isValidCNPJ('00.000.000/0001-91')).toBe(true); // Banco do Brasil
       expect(isValidCNPJ('00000000000191')).toBe(true);
@@ -872,13 +878,23 @@ describe('renegotiateInstallmentGroup', () => {
       expect(isValidCNPJ('11.222.333/0001-81')).toBe(true);
     });
 
+    it('validates official RFB alphanumeric CNPJ correctly', () => {
+      // 12ABC34501DE35 -> Módulo 11 com pesos oficiais: DV1=3, DV2=5
+      expect(isValidCNPJ('12.ABC.345/01DE-35')).toBe(true);
+      expect(isValidCNPJ('12ABC34501DE35')).toBe(true);
+      expect(isValidCNPJ('12abc34501de35')).toBe(true);
+    });
+
     it('rejects invalid CNPJs, wrong length, repeated digits, or incorrect check digits', () => {
       expect(isValidCNPJ('')).toBe(false);
       expect(isValidCNPJ('123')).toBe(false);
       expect(isValidCNPJ('00.000.000/0000-00')).toBe(false);
       expect(isValidCNPJ('11.111.111/1111-11')).toBe(false);
+      expect(isValidCNPJ('AAAAAAAAAAAAAA')).toBe(false);
       expect(isValidCNPJ('00.000.000/0001-90')).toBe(false); // Wrong 2nd digit
       expect(isValidCNPJ('12.345.678/0001-90')).toBe(false); // Wrong check digits
+      expect(isValidCNPJ('12.ABC.345/01DE-34')).toBe(false); // Wrong DV in alphanumeric
+      expect(isValidCNPJ('12.ABC.345/01DE-AB')).toBe(false); // Letters in DVs not allowed
     });
   });
 });

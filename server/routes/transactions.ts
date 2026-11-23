@@ -11,7 +11,7 @@ router.use(requireAuth);
 router.get('/', (req: AuthedRequest, res: Response): void => {
   const uid = req.authUser!.id;
   const rawTransactions = db.prepare(`
-    SELECT id, user_id as userId, type, description, amount_cents as amountCents,
+    SELECT id, user_id as userId, company_id as companyId, type, description, amount_cents as amountCents,
       discount_cents as discountCents, interest_cents as interestCents,
       due_date as dueDate, paid_at as paidAt, status, payment_method as paymentMethod,
       category_id as categoryId, contact_id as contactId, document_number as documentNumber,
@@ -25,6 +25,7 @@ router.get('/', (req: AuthedRequest, res: Response): void => {
 
   const transactions = rawTransactions.map((row) => ({
     ...row,
+    companyId: (row.companyId as string) || null,
     discountCents: Number(row.discountCents || 0),
     interestCents: Number(row.interestCents || 0),
     issueDate: (row.issueDate as string) || null,
@@ -45,13 +46,14 @@ router.post('/batch', (req: AuthedRequest, res: Response): void => {
 
   const upsert = db.prepare(`
     INSERT INTO transactions (
-      id, user_id, type, description, amount_cents, discount_cents, interest_cents,
+      id, user_id, company_id, type, description, amount_cents, discount_cents, interest_cents,
       due_date, paid_at, status, payment_method,
       category_id, contact_id, document_number, issue_date, installment_group_id,
       installment_number, installment_total, is_recurring, recurrence_interval,
       notes, source, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
+      company_id = excluded.company_id,
       type = excluded.type,
       description = excluded.description,
       amount_cents = excluded.amount_cents,
@@ -88,6 +90,7 @@ router.post('/batch', (req: AuthedRequest, res: Response): void => {
       upsert.run(
         String(item.id || crypto.randomUUID()),
         uid,
+        item.companyId ? String(item.companyId) : null,
         item.type === 'receivable' ? 'receivable' : 'payable',
         String(item.description || 'Lançamento').slice(0, 200),
         Math.max(1, Math.round(Number(item.amountCents) || 0)),
@@ -132,13 +135,14 @@ router.put('/:id', (req: AuthedRequest, res: Response): void => {
 
   db.prepare(`
     INSERT INTO transactions (
-      id, user_id, type, description, amount_cents, discount_cents, interest_cents,
+      id, user_id, company_id, type, description, amount_cents, discount_cents, interest_cents,
       due_date, paid_at, status, payment_method,
       category_id, contact_id, document_number, issue_date, installment_group_id,
       installment_number, installment_total, is_recurring, recurrence_interval,
       notes, source, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
+      company_id = excluded.company_id,
       type = excluded.type,
       description = excluded.description,
       amount_cents = excluded.amount_cents,
@@ -163,6 +167,7 @@ router.put('/:id', (req: AuthedRequest, res: Response): void => {
   `).run(
     id,
     uid,
+    item.companyId ? String(item.companyId) : null,
     item.type === 'receivable' ? 'receivable' : 'payable',
     String(item.description || 'Lançamento').slice(0, 200),
     Math.max(1, Math.round(Number(item.amountCents) || 0)),

@@ -74,6 +74,7 @@ db.exec(`
     payment_method TEXT NOT NULL DEFAULT '',
     category_id TEXT,
     contact_id TEXT,
+    company_id TEXT,
     document_number TEXT NOT NULL DEFAULT '',
     issue_date TEXT,
     installment_group_id TEXT,
@@ -120,6 +121,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_contacts_user ON contacts(user_id);
   CREATE INDEX IF NOT EXISTS idx_categories_user ON categories(user_id);
   CREATE INDEX IF NOT EXISTS idx_companies_user ON companies(user_id);
+  CREATE INDEX IF NOT EXISTS idx_tx_company ON transactions(user_id, company_id);
 `);
 
 // Safe migrations for existing SQLite databases
@@ -141,6 +143,9 @@ if (!txColumns.some((col) => col.name === 'recurrence_interval')) {
 }
 if (!txColumns.some((col) => col.name === 'issue_date')) {
   db.exec('ALTER TABLE transactions ADD COLUMN issue_date TEXT');
+}
+if (!txColumns.some((col) => col.name === 'company_id')) {
+  db.exec('ALTER TABLE transactions ADD COLUMN company_id TEXT');
 }
 
 export function seedDefaultCompanyForUser(userId: string): string {

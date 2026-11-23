@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import type { Category, Contact, Transaction } from '../types';
+import type { Category, Company, Contact, Transaction } from '../types';
 import { formatBRL, isOverdue, todayISO } from '../utils/format';
 import { BatchSettleModal } from './BatchSettleModal';
 import { createDateFilterState, matchesDateFilter, type DateFilterValue } from './DateRangeFilter';
@@ -14,6 +14,8 @@ interface TransactionsViewProps {
   transactions: Transaction[];
   categories: Category[];
   contacts: Contact[];
+  companies?: Company[];
+  selectedCompanyId?: string | 'all';
   onOpenNew: () => void;
   onOpenConsult: (tx: Transaction) => void;
   onOpenEdit: (tx: Transaction) => void;
@@ -34,6 +36,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   transactions,
   categories,
   contacts,
+  companies = [],
+  selectedCompanyId = 'all',
   onOpenNew,
   onOpenConsult,
   onOpenEdit,
@@ -77,6 +81,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       if (statusFilter === 'settled' && t.status !== 'settled') return false;
       if (statusFilter === 'overdue' && !isOverdue(t, today)) return false;
       if (statusFilter === 'recurring' && !t.isRecurring) return false;
+      if (selectedCompanyId && selectedCompanyId !== 'all' && t.companyId !== selectedCompanyId) return false;
       if (categoryFilter !== 'all' && (t.categoryId || '') !== categoryFilter) return false;
       if (contactFilter !== 'all' && (t.contactId || '') !== contactFilter) return false;
       if (q) {
@@ -99,7 +104,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     return { filtered: rows, totals: { rec, pay, net: rec - pay } };
   }, [
     transactions, dateFilter, selectedMonth, typeFilter, statusFilter,
-    categoryFilter, contactFilter, search, searchAllHistory, today, contactMap, catMap,
+    categoryFilter, contactFilter, selectedCompanyId, search, searchAllHistory, today, contactMap, catMap,
   ]);
 
   const selection = useMemo(() => {
@@ -165,6 +170,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         transactions={filtered}
         catMap={catMap}
         contactMap={contactMap}
+        companies={companies}
+        selectedCompanyId={selectedCompanyId}
         selectedIds={selectedIds}
         allVisibleSelected={allVisibleSelected}
         today={today}

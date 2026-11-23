@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Calendar, Layers, Repeat } from 'lucide-react';
-import type { Category, Contact, RecurrenceInterval, Transaction, TransactionType } from '../types';
+import type { Category, Company, Contact, RecurrenceInterval, Transaction, TransactionType } from '../types';
 import {
   buildInstallmentTransactions, buildRecurringTransactions, formatDateBR,
   formatInputBRL, parseBRLToCents, PAYMENT_METHODS, todayISO,
@@ -13,6 +13,8 @@ interface TransactionModalProps {
   editingTransaction: Transaction | null;
   categories: Category[];
   contacts: Contact[];
+  companies?: Company[];
+  selectedCompanyId?: string | 'all';
   onClose: () => void;
   onSaveBatch: (items: Transaction[]) => void;
   onUpdateSingle: (item: Transaction) => void;
@@ -22,9 +24,34 @@ const INPUT_CLS = 'w-full px-3 py-2 rounded-xl border border-slate-200 dark:bord
 const DATE_INPUT_CLS = `${INPUT_CLS} pl-10 font-mono-tabular dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:opacity-0`;
 
 export const TransactionModal: React.FC<TransactionModalProps> = ({
-  userId, editingTransaction, categories, contacts, onClose, onSaveBatch, onUpdateSingle,
+  userId,
+  editingTransaction,
+  categories,
+  contacts,
+  companies = [],
+  selectedCompanyId = 'all',
+  onClose,
+  onSaveBatch,
+  onUpdateSingle,
 }) => {
   const isEditing = Boolean(editingTransaction);
+  const activeCompanies = useMemo(
+    () => companies.filter((c) => c.status === 'active'),
+    [companies]
+  );
+
+  const defaultCompanyId = useMemo(() => {
+    if (editingTransaction?.companyId) return editingTransaction.companyId;
+    if (selectedCompanyId && selectedCompanyId !== 'all') {
+      const match = activeCompanies.find((c) => c.id === selectedCompanyId);
+      if (match) return match.id;
+    }
+    const def = activeCompanies.find((c) => c.isDefault);
+    if (def) return def.id;
+    return activeCompanies[0]?.id || '';
+  }, [editingTransaction, selectedCompanyId, activeCompanies]);
+
+  const [companyId, setCompanyId] = useState<string>(defaultCompanyId);
   const [type, setType] = useState<TransactionType>(editingTransaction?.type || 'payable');
   const [description, setDescription] = useState(editingTransaction?.description || '');
   const [amountRaw, setAmountRaw] = useState(editingTransaction ? formatInputBRL(editingTransaction.amountCents) : '');
@@ -94,6 +121,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     if (isEditing && editingTransaction) {
       onUpdateSingle({
         ...editingTransaction,
+        companyId: companyId || null,
         type, description: description.trim(), amountCents: parsedCents, dueDate, status,
         paidAt: status === 'settled' ? editingTransaction.paidAt || todayISO() : null,
         paymentMethod: status === 'settled' ? paymentMethod || 'PIX' : '',
@@ -107,7 +135,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     }
 
     const common = {
-      userId, type, description, amountCents: parsedCents, firstDueDate: dueDate,
+      userId, companyId: companyId || null, type, description, amountCents: parsedCents, firstDueDate: dueDate,
       categoryId: categoryId || null, contactId: contactId || null,
       documentNumber: unifiedDoc, issueDate: issueDate || null, notes,
       markFirstSettled, paymentMethod: markFirstSettled ? paymentMethod : '',
@@ -207,6 +235,24 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+              🏢 Empresa
+            </label>
+            <select
+              value={companyId}
+              onChange={(e) => setCompanyId(e.target.value)}
+              className={INPUT_CLS}
+              data-testid="tx-company-select"
+            >
+              <option value="">Nenhuma / Sem vínculo</option>
+              {activeCompanies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.tradeName || c.legalName} {c.isDefault ? '(Padrão)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
           <div>
             <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Categoria</label>
             <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={INPUT_CLS}>

@@ -76,6 +76,7 @@ export const api = {
       categories: Category[];
       contacts: Contact[];
       transactions: Transaction[];
+      companies?: Company[];
       serverTime: string;
     }>('/api/data/snapshot');
   },

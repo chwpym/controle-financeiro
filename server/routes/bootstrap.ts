@@ -19,7 +19,7 @@ function getSnapshotData(uid: string) {
   `).all(uid);
 
   const rawTransactions = db.prepare(`
-    SELECT id, user_id as userId, type, description, amount_cents as amountCents,
+    SELECT id, user_id as userId, company_id as companyId, type, description, amount_cents as amountCents,
       discount_cents as discountCents, interest_cents as interestCents,
       due_date as dueDate, paid_at as paidAt, status, payment_method as paymentMethod,
       category_id as categoryId, contact_id as contactId, document_number as documentNumber,
@@ -33,6 +33,7 @@ function getSnapshotData(uid: string) {
 
   const transactions = rawTransactions.map((row) => ({
     ...row,
+    companyId: (row.companyId as string) || null,
     discountCents: Number(row.discountCents || 0),
     interestCents: Number(row.interestCents || 0),
     issueDate: (row.issueDate as string) || null,
@@ -40,10 +41,26 @@ function getSnapshotData(uid: string) {
     recurrenceInterval: row.recurrenceInterval || null,
   }));
 
+  const rawCompanies = db.prepare(`
+    SELECT id, user_id as userId, legal_name as legalName, trade_name as tradeName,
+      document, state_registration as stateRegistration,
+      municipal_registration as municipalRegistration, status, email, phone,
+      whatsapp, cep, street, number, complement, neighborhood, city, state,
+      logo_data_url as logoDataUrl, color, is_default as isDefault,
+      created_at as createdAt, updated_at as updatedAt
+    FROM companies WHERE user_id = ? ORDER BY is_default DESC, trade_name ASC
+  `).all(uid) as Array<Record<string, unknown>>;
+
+  const companies = rawCompanies.map((c) => ({
+    ...c,
+    isDefault: Boolean(c.isDefault),
+  }));
+
   return {
     categories,
     contacts,
     transactions,
+    companies,
     serverTime: new Date().toISOString(),
   };
 }

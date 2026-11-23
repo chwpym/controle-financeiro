@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
-import type { Category, Contact, LocalBackupPayload, Transaction } from '../types';
+import type { Category, Company, Contact, LocalBackupPayload, Transaction } from '../types';
 import { formatBRL, formatDateBR, isOverdue, todayISO } from './format';
 
 export interface ExportContext {
@@ -161,6 +161,7 @@ export interface ReceiptPdfParams {
   transaction: Transaction;
   category?: Category;
   contact?: Contact;
+  company?: Company;
   username: string;
 }
 
@@ -168,6 +169,7 @@ export function exportTransactionReceiptPDF({
   transaction: t,
   category,
   contact,
+  company,
   username,
 }: ReceiptPdfParams): void {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -190,39 +192,75 @@ export function exportTransactionReceiptPDF({
       ? 'VENCIDO (PENDENTE)'
       : 'PENDENTE';
 
-  // Header band
+  // Header band (34mm height for full company details)
   doc.setFillColor(15, 118, 110);
-  doc.rect(0, 0, 210, 30, 'F');
+  doc.rect(0, 0, 210, 36, 'F');
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(16);
-  doc.text(headingTitle, 15, 14);
-  doc.setFontSize(9.5);
-  doc.text(`FluxoClaro · Controle Financeiro (BRL)   |   Emitido em ${formatDateBR(today)}`, 15, 22);
+
+  if (company) {
+    // Header com dados oficiais da empresa
+    doc.setFontSize(14);
+    doc.text(company.tradeName || company.legalName, 15, 11);
+
+    doc.setFontSize(8);
+    const subInfo = [
+      company.legalName && company.legalName !== company.tradeName ? company.legalName : null,
+      company.document ? `CNPJ: ${company.document}` : null,
+      company.stateRegistration ? `IE: ${company.stateRegistration}` : null,
+    ].filter(Boolean).join('   |   ');
+    doc.text(subInfo, 15, 17);
+
+    const companyAddress = [
+      [company.street, company.number].filter(Boolean).join(', '),
+      company.complement,
+      company.neighborhood,
+      [company.city, company.state].filter(Boolean).join(' / '),
+      company.cep ? `CEP ${company.cep}` : null,
+    ].filter(Boolean).join(' — ');
+    doc.text(companyAddress || 'Endereço não informado', 15, 23);
+
+    doc.setFontSize(8.5);
+    doc.text(`${headingTitle}   |   Emitido em ${formatDateBR(today)}`, 15, 30);
+
+    // Renderizar Logotipo se existir
+    if (company.logoDataUrl && company.logoDataUrl.startsWith('data:image/')) {
+      try {
+        doc.addImage(company.logoDataUrl, 168, 5, 27, 26, undefined, 'FAST');
+      } catch {
+        // Silently ignore if image format unsupported in PDF canvas
+      }
+    }
+  } else {
+    doc.setFontSize(16);
+    doc.text(headingTitle, 15, 14);
+    doc.setFontSize(9.5);
+    doc.text(`FluxoClaro · Controle Financeiro (BRL)   |   Emitido em ${formatDateBR(today)}`, 15, 22);
+  }
 
   // Value & Status Highlight Box
   doc.setDrawColor(203, 213, 225);
   doc.setFillColor(248, 250, 252);
-  doc.roundedRect(15, 38, 180, 28, 3, 3, 'FD');
+  doc.roundedRect(15, 42, 180, 28, 3, 3, 'FD');
 
   doc.setTextColor(71, 85, 105);
   doc.setFontSize(9);
-  doc.text('VALOR DO LANÇAMENTO', 22, 46);
-  doc.text('SITUAÇÃO', 120, 46);
+  doc.text('VALOR DO LANÇAMENTO', 22, 50);
+  doc.text('SITUAÇÃO', 120, 50);
 
   doc.setTextColor(15, 23, 42);
   doc.setFontSize(18);
-  doc.text(formatBRL(t.amountCents), 22, 57);
+  doc.text(formatBRL(t.amountCents), 22, 61);
 
   doc.setFontSize(12);
   if (isSettled) doc.setTextColor(4, 120, 87);
   else if (overdue) doc.setTextColor(220, 38, 38);
   else doc.setTextColor(217, 119, 6);
-  doc.text(statusText, 120, 56);
+  doc.text(statusText, 120, 60);
 
   // Reference line
   doc.setTextColor(100, 116, 139);
   doc.setFontSize(8.5);
-  doc.text(`Identificador: ${t.id.slice(0, 8).toUpperCase()}   |   Usuário responsável: ${username}`, 15, 74);
+  doc.text(`Identificador: ${t.id.slice(0, 8).toUpperCase()}   |   Usuário responsável: ${username}`, 15, 76);
 
   // Details table
   const parcelaLabel = t.installmentTotal > 1 ? `${t.installmentNumber} de ${t.installmentTotal}` : 'À vista (1/1)';
@@ -238,6 +276,9 @@ export function exportTransactionReceiptPDF({
 
   const originalCents = Math.max(1, t.amountCents + (t.discountCents || 0) - (t.interestCents || 0));
   const detailRows: [string, string][] = [
+    ...(company
+      ? ([['Empresa / Unidade', `${company.tradeName || company.legalName} (${company.document || 'Sem CNPJ'})`]] as [string, string][])
+      : []),
     ['Descrição', t.description],
     ['Tipo de Conta', isReceivable ? 'Conta a Receber (Entrada)' : 'Conta a Pagar (Saída)'],
     ['Data de Vencimento', formatDateBR(t.dueDate)],
@@ -259,7 +300,7 @@ export function exportTransactionReceiptPDF({
   ];
 
   autoTable(doc, {
-    startY: 79,
+    startY: 82,
     head: [['Dados do Lançamento', 'Informação']],
     body: detailRows,
     theme: 'grid',

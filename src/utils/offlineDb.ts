@@ -1,4 +1,4 @@
-import type { Category, Contact, SyncMutation, Transaction, UserProfile } from '../types';
+import type { Category, Company, Contact, SyncMutation, Transaction, UserProfile } from '../types';
 
 const DB_NAME = 'fluxoclaro_offline_db';
 const DB_VERSION = 1;
@@ -11,6 +11,7 @@ export interface UserSnapshotCache {
   categories: Category[];
   contacts: Contact[];
   transactions: Transaction[];
+  companies?: Company[];
   lastSyncedAt: string | null;
 }
 

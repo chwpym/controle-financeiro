@@ -15,6 +15,7 @@ interface NotificationsBellProps {
   onQuickSettle: (tx: Transaction) => void;
   onNavigateToTransactions: (filter?: string) => void;
   onOpenSettings: () => void;
+  onOpenAlertsDrawer?: () => void;
 }
 
 export const NotificationsBell: React.FC<NotificationsBellProps> = ({
@@ -29,6 +30,7 @@ export const NotificationsBell: React.FC<NotificationsBellProps> = ({
   onQuickSettle,
   onNavigateToTransactions,
   onOpenSettings,
+  onOpenAlertsDrawer,
 }) => {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -191,7 +193,7 @@ export const NotificationsBell: React.FC<NotificationsBellProps> = ({
             </div>
           ) : (
             <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
-              {alerts.slice(0, 15).map((tx) => {
+              {alerts.slice(0, 5).map((tx) => {
                 const diff = daysUntilDue(tx.dueDate, today);
                 const contact = tx.contactId ? contactMap.get(tx.contactId) : undefined;
                 const dueLabel =
@@ -272,9 +274,9 @@ export const NotificationsBell: React.FC<NotificationsBellProps> = ({
                   </div>
                 );
               })}
-              {alerts.length > 15 && (
-                <div className="px-4 py-2 text-center text-[11px] text-slate-500 dark:text-slate-400">
-                  Mostrando 15 de {alerts.length} contas pendentes.
+              {alerts.length > 5 && (
+                <div className="px-4 py-2 text-center text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50/50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800">
+                  Mostrando 5 de {alerts.length} pendências urgentes.
                 </div>
               )}
             </div>
@@ -310,11 +312,16 @@ export const NotificationsBell: React.FC<NotificationsBellProps> = ({
               type="button"
               onClick={() => {
                 setOpen(false);
-                onNavigateToTransactions('pending');
+                if (onOpenAlertsDrawer) {
+                  onOpenAlertsDrawer();
+                } else {
+                  onNavigateToTransactions('pending');
+                }
               }}
               className="text-xs font-semibold text-teal-700 dark:text-teal-400 hover:underline py-1"
+              data-testid="notifications-see-all-alerts"
             >
-              Ver todas as contas
+              Ver todos os avisos →
             </button>
           </div>
         </div>

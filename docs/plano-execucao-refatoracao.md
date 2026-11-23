@@ -207,21 +207,20 @@ Permitir a gestão de múltiplos CNPJs (Matriz, Filiais ou diferentes negócios)
   - Drawer de cadastro e edição no padrão do `ContactDrawer.tsx`: abas "1. Geral & Contato" e "2. Endereço Completo", toggle Ativa/Inativa, upload de logo Base64 com preview e busca de CEP automática.
 - **Validação:** 94 testes passando no Vitest (100% verde), 0 erros no lint.
 
-### Etapa 9.2: Vínculo de Contas, Seletor Global, Recibos PDF e Drawer de Avisos
-- **Migration Segura em `transactions`:**
-  - Adição da coluna `company_id TEXT` (retrocompatível, transações antigas usam a empresa padrão ou modo consolidado).
+### ✅ Etapa 9.2: Concluída com Sucesso (Vínculo de Contas, Seletor Global, Recibos PDF, Drawer de Avisos e CNPJ Alfanumérico)
+- **CNPJ Alfanumérico da RFB (IN nº 2.229/2024):**
+  - `maskCNPJ` e `isValidCNPJ` em `src/utils/format.ts` aceitando posições 1 a 12 com letras e números e posições 13-14 numéricas com módulo 11 adaptado à tabela ASCII.
+- **Migration e Vínculo de Contas:**
+  - Coluna `company_id` e índice `idx_tx_company` em `transactions` no SQLite e rotas REST.
+  - Seleção no modal de lançamento (`TransactionModal`) e tag colorida na tabela de contas (`TransactionTable`).
 - **Seletor Global no Header (`CompanySelector.tsx`):**
-  - Dropdown no topo permitindo alternar entre empresa específica ou `🌐 Todas as Empresas (Visão Consolidada)`.
-- **Integração no Formulário de Contas (`TransactionModal.tsx`):**
-  - Campo seletor de empresa (pré-preenchido com a empresa ativa no topo ou a padrão).
-- **Tabela de Lançamentos e Dashboard:**
-  - Indicador visual da empresa em cada lançamento (tag/pílula colorida).
-  - Filtro por empresa e consolidação financeira global.
-- **Recibos Dinâmicos (`TransactionDetailModal.tsx` / `ReceiptPDF`):**
-  - Cabeçalho do recibo renderiza o logotipo, dados fiscais e contatos da empresa proprietária daquele lançamento.
-- **Evolução do Painel de Avisos (`[ 🔔 AVISOS ]` + `AlertsDrawer.tsx`):**
-  - O popover do sininho exibe os alertas urgentes com limite compacto (3 a 5 itens) filtrados pela empresa selecionada.
-  - Link *"Ver todos os avisos"* abre um **Drawer lateral deslizante (Slide-over da direita)** idêntico ao `ContactDrawer.tsx`, com a lista completa de contas vencidas e a vencer, filtros rápidos e botões de baixa imediata (`Pagar` / `Receber`).
+  - Dropdown no topo alternando entre empresa individual e `🌐 Todas as Empresas (Visão Consolidada)`.
+  - Dashboard recalcula KPIs e gráficos em tempo real de acordo com a empresa ativa.
+- **Recibos Dinâmicos com Logotipo:**
+  - Cabeçalho oficial no `TransactionDetailModal` e no PDF gerado com logotipo, Razão Social, CNPJ, IE e endereço.
+- **Drawer Lateral de Avisos (`AlertsDrawer.tsx`):**
+  - Drawer deslizante da direita ativado pelo atalho do popover de avisos, com filtros e baixas rápidas.
+- **Validação:** 101 testes passando no Vitest (100% verde em 12 arquivos), 0 erros no lint.
 
 ### Etapa 9.3: Controle de Acesso, Permissões por Empresa (RBAC) e Ajuste dos Modais de Usuário
 - **Correção Visual no Painel Admin (`AdminView.tsx`):**

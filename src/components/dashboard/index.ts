@@ -8,3 +8,4 @@ export * from './DueAlertsCard';
 export * from './DashboardConfigPopover';
 export * from './DashboardWidgetGrid';
 export * from './useDashboardStats';
+export * from './AlertsDrawer';

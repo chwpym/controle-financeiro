@@ -97,6 +97,7 @@ export type RecurrenceInterval = 'monthly' | 'biweekly' | 'yearly';
 export interface Transaction {
   id: string;
   userId: string;
+  companyId?: string | null;
   type: TransactionType;
   description: string;
   amountCents: number;

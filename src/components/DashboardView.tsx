@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Check, Move, Plus } from 'lucide-react';
-import type { Category, Contact, Transaction } from '../types';
+import type { Category, Company, Contact, Transaction } from '../types';
 import {
   DashboardConfigPopover,
   DashboardKpis,
@@ -23,6 +23,8 @@ export interface DashboardViewProps {
   transactions: Transaction[];
   categories: Category[];
   contacts: Contact[];
+  companies?: Company[];
+  selectedCompanyId?: string | 'all';
   notifyLeadDays: number;
   inAppAlertsEnabled: boolean;
   notificationPermission: NotificationPermission | 'unsupported';
@@ -40,6 +42,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   transactions,
   categories,
   contacts,
+  companies = [],
+  selectedCompanyId = 'all',
   notifyLeadDays,
   inAppAlertsEnabled,
   notificationPermission,
@@ -53,7 +57,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const layoutKey = `fluxoclaro_dashboard_layout_${userId}`;
   const [layout, setLayout] = useState<DashboardLayoutState>(() => loadDashboardLayout(layoutKey));
   const [reorderMode, setReorderMode] = useState(false);
-  const { monthStats } = useDashboardStats(transactions, selectedMonth);
+
+  const scopedTransactions = useMemo(() => {
+    if (!selectedCompanyId || selectedCompanyId === 'all') return transactions;
+    return transactions.filter((t) => t.companyId === selectedCompanyId);
+  }, [transactions, selectedCompanyId]);
+
+  const { monthStats } = useDashboardStats(scopedTransactions, selectedMonth);
 
   useEffect(() => {
     setLayout(loadDashboardLayout(layoutKey));
@@ -167,7 +177,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         onChangeWidgetSpan={(id: WidgetCardId, span: WidgetSpan) =>
           updateLayout((prev) => ({ ...prev, widgetSpans: { ...prev.widgetSpans, [id]: span } }))
         }
-        transactions={transactions}
+        transactions={scopedTransactions}
         monthRows={monthStats.monthRows}
         selectedMonth={selectedMonth}
         categories={categories}

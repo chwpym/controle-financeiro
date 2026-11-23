@@ -1,12 +1,14 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { CheckCircle2, Copy, Edit2, Eye, Layers, Plus, Repeat, RotateCcw, Trash2 } from 'lucide-react';
-import type { Category, Contact, Transaction } from '../../types';
+import type { Category, Company, Contact, Transaction } from '../../types';
 import { formatBRL, formatDateBR, isOverdue, RECURRENCE_LABELS } from '../../utils/format';
 
 export interface TransactionTableProps {
   transactions: Transaction[];
   catMap: Map<string, Category>;
   contactMap: Map<string, Contact>;
+  companies?: Company[];
+  selectedCompanyId?: string | 'all';
   selectedIds: Set<string>;
   allVisibleSelected: boolean;
   today: string;
@@ -41,6 +43,8 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
   transactions,
   catMap,
   contactMap,
+  companies = [],
+  selectedCompanyId = 'all',
   selectedIds,
   allVisibleSelected,
   today,
@@ -54,6 +58,8 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
   onRequestDelete,
   onManageInstallments,
 }) => {
+  const companyMap = useMemo(() => new Map(companies.map((c) => [c.id, c])), [companies]);
+  const isConsolidated = !selectedCompanyId || selectedCompanyId === 'all';
   if (transactions.length === 0) {
     return (
       <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-10 text-center space-y-3">
@@ -219,14 +225,36 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
                     {formatDateBR(tx.dueDate)}
                   </td>
                   <td className="py-3 px-4 min-w-[200px]">
-                    <button
-                      type="button"
-                      onClick={() => onOpenConsult(tx)}
-                      title="Consultar detalhes (somente leitura)"
-                      className="text-left font-medium text-slate-900 dark:text-white hover:text-teal-700 dark:hover:text-teal-400 transition-colors cursor-pointer"
-                    >
-                      {tx.description}
-                    </button>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => onOpenConsult(tx)}
+                        title="Consultar detalhes (somente leitura)"
+                        className="text-left font-medium text-slate-900 dark:text-white hover:text-teal-700 dark:hover:text-teal-400 transition-colors cursor-pointer"
+                      >
+                        {tx.description}
+                      </button>
+                      {isConsolidated && tx.companyId && companyMap.get(tx.companyId) && (
+                        <span
+                          className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-semibold border shrink-0"
+                          style={{
+                            backgroundColor: `${companyMap.get(tx.companyId)!.color || '#0F766E'}15`,
+                            color: companyMap.get(tx.companyId)!.color || '#0F766E',
+                            borderColor: `${companyMap.get(tx.companyId)!.color || '#0F766E'}35`,
+                          }}
+                          title={`Empresa: ${companyMap.get(tx.companyId)!.tradeName || companyMap.get(tx.companyId)!.legalName}`}
+                          data-testid={`company-tag-${tx.id}`}
+                        >
+                          <span
+                            className="w-1.5 h-1.5 rounded-full shrink-0"
+                            style={{ backgroundColor: companyMap.get(tx.companyId)!.color || '#0F766E' }}
+                          />
+                          <span className="truncate max-w-[110px]">
+                            {companyMap.get(tx.companyId)!.tradeName || companyMap.get(tx.companyId)!.legalName}
+                          </span>
+                        </span>
+                      )}
+                    </div>
                     <div className="text-xs text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-1.5">
                       <span>{tx.type === 'receivable' ? 'A Receber' : 'A Pagar'}</span>
                       {contact && <span>· {contact.name}</span>}
@@ -283,9 +311,29 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
                 <div className="flex items-start gap-2.5 min-w-0">
                   <input type="checkbox" checked={checked} onChange={() => onToggleSelect(tx.id)} aria-label={`Selecionar ${tx.description}`} className="mt-1 rounded border-slate-300 text-teal-700 w-4 h-4 shrink-0" />
                   <div className="min-w-0">
-                    <button type="button" onClick={() => onOpenConsult(tx)} className="text-left text-sm font-semibold text-slate-900 dark:text-white hover:text-teal-700 dark:hover:text-teal-400">
-                      {tx.description}
-                    </button>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button type="button" onClick={() => onOpenConsult(tx)} className="text-left text-sm font-semibold text-slate-900 dark:text-white hover:text-teal-700 dark:hover:text-teal-400">
+                        {tx.description}
+                      </button>
+                      {isConsolidated && tx.companyId && companyMap.get(tx.companyId) && (
+                        <span
+                          className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-semibold border shrink-0"
+                          style={{
+                            backgroundColor: `${companyMap.get(tx.companyId)!.color || '#0F766E'}15`,
+                            color: companyMap.get(tx.companyId)!.color || '#0F766E',
+                            borderColor: `${companyMap.get(tx.companyId)!.color || '#0F766E'}35`,
+                          }}
+                        >
+                          <span
+                            className="w-1.5 h-1.5 rounded-full shrink-0"
+                            style={{ backgroundColor: companyMap.get(tx.companyId)!.color || '#0F766E' }}
+                          />
+                          <span className="truncate max-w-[100px]">
+                            {companyMap.get(tx.companyId)!.tradeName || companyMap.get(tx.companyId)!.legalName}
+                          </span>
+                        </span>
+                      )}
+                    </div>
                     <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex flex-wrap gap-x-1">
                       <span className="font-mono-tabular">{formatDateBR(tx.dueDate)}</span>
                       {tx.issueDate && <span className="font-mono-tabular">· Emissão: {formatDateBR(tx.issueDate)}</span>}
