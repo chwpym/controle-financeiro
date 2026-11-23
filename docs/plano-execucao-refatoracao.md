@@ -191,12 +191,37 @@ Transformar o **FluxoClaro** em um sistema financeiro modular, de fácil manuten
 
 ---
 
-## 📋 FASE 9: Cadastro da Empresa Emitente ("Minha Empresa") & Logotipo Dinâmico
+## 📋 FASE 9: Multi-Empresas ("Minhas Empresas"), Visão Consolidada, Logotipos e Permissões
 
-Permitir que o gestor configure os dados oficiais da sua empresa e envie a logo da marca para os recibos impressos e relatórios:
-- Formulário em Configurações com Razão Social, Fantasia, CNPJ (com validação matemática), IE, IM, Endereço completo com ViaCEP, Telefone e WhatsApp.
-- Upload de Logo (PNG, JPG, WebP, SVG) com pré-visualização e armazenamento seguro.
-- Inserção dinâmica no cabeçalho do recibo emitido (`TransactionDetailModal` / `ReceiptPDF`).
+Permitir a gestão de múltiplos CNPJs (Matriz, Filiais ou diferentes negócios) com visão financeira individual ou consolidada, logotipo próprio por empresa para recibos e controle de permissões por usuário:
+
+### Etapa 9.1: Entidade Empresa, CRUD Backend e Configurações
+- **Modelo `Company` em `src/types.ts` e SQLite (`server/db.ts`):**
+  - Campos: `id`, `user_id`, `legalName` (Razão Social), `tradeName` (Nome Fantasia), `document` (CNPJ com validação matemática), `stateRegistration`, `municipalRegistration`, `email`, `phone`, `whatsapp`, endereço completo (ViaCEP), `logoDataUrl`, `color` (tag visual) e `isDefault`.
+- **Rotas Backend em `server/routes/companies.ts`:**
+  - `GET /api/companies`, `POST /api/companies`, `PUT /api/companies/:id`, `DELETE /api/companies/:id`.
+- **Tela de Gestão de Empresas em Configurações (`CompaniesSettingsTab.tsx`):**
+  - Listagem de empresas cadastradas com badges coloridos e logo em miniatura.
+  - Modal/Drawer de cadastro e edição com upload de logo (preview em tempo real), busca de CEP automática e validação de CNPJ.
+  - Definição da Empresa Padrão.
+
+### Etapa 9.2: Vínculo de Contas, Seletor Global e Recibos PDF
+- **Migration Segura em `transactions`:**
+  - Adição da coluna `company_id TEXT` (retrocompatível, transações antigas usam a empresa padrão ou modo consolidado).
+- **Seletor Global no Header (`CompanySelector.tsx`):**
+  - Dropdown no topo permitindo alternar entre empresa específica ou `🌐 Todas as Empresas (Visão Consolidada)`.
+- **Integração no Formulário de Contas (`TransactionModal.tsx`):**
+  - Campo seletor de empresa (pré-preenchido com a empresa ativa no topo ou a padrão).
+- **Tabela de Lançamentos e Dashboard:**
+  - Indicador visual da empresa em cada lançamento (tag/pílula colorida).
+  - Filtro por empresa e consolidação financeira global.
+- **Recibos Dinâmicos (`TransactionDetailModal.tsx` / `ReceiptPDF`):**
+  - Cabeçalho do recibo renderiza o logotipo, dados fiscais e contatos da empresa proprietária daquele lançamento.
+
+### Etapa 9.3: Controle de Acesso e Permissões por Empresa (RBAC)
+- **Regras de Visualização:**
+  - Usuários `master` e `admin`: Acesso irrestrito a todas as empresas e à visão consolidada.
+  - Usuários operacionais (`user`): Podem ter restrição de acesso configurada no Painel Admin (`server/routes/admin.ts`), enxergando apenas os CNPJs aos quais têm permissão de visualização e movimentação financeira.
 
 ---
 

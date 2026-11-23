@@ -9,7 +9,7 @@ Este documento consolida os requisitos de negócio, funcionalidades estratégica
 | Fase | Título | Objetivo Principal | Status |
 | :--- | :--- | :--- | :--- |
 | **Fase 8** | **Módulo Excel Avançado & Drag-and-Drop** | Upload por arraste nativo, mapeamento flexível e redução de `ExcelImportModal.tsx` de 824 para < 200 linhas | ✅ Concluída |
-| **Fase 9** | **Cadastro da Empresa & Logotipo** | Identificação oficial da empresa (CNPJ, IE, Endereço ViaCEP) e logo nos Recibos PDF | ⏳ Pronta para Início |
+| **Fase 9** | **Multi-Empresas, Visão Consolidada, Logotipos e Permissões** | Múltiplos CNPJs, seletor de empresa (individual ou consolidado), logo nos recibos e permissões por usuário | ⏳ Pronta para Início |
 | **Fase 10** | **Licenciamento & Trava por Tempo de Uso** | Proteção de licença comercial, token assinado, aviso prévio e tela de liberação | 📋 Planejada |
 | **Fase 11** | **Modularização das Telas Restantes** | Decomposição de Contatos, Configurações, Relatórios e Renegociação | 📋 Planejada |
 
@@ -28,36 +28,22 @@ Este documento consolida os requisitos de negócio, funcionalidades estratégica
 
 ---
 
-## 🏢 1. Cadastro da Empresa Emitente ("Minha Empresa") (Fase 9)
-**Objetivo:** Permitir que o gestor configure os dados completos da sua empresa para emissão oficial de recibos em PDF, orçamentos e relatórios gerenciais.
+## 🏢 1. Multi-Empresas ("Minhas Empresas"), Visão Consolidada e Logotipos (Fase 9)
+**Objetivo:** Permitir que o gestor cadastre e gerencie múltiplos CNPJs/Empresas (Matriz, Filiais ou empresas de diferentes segmentos), possibilitando visualizar o fluxo financeiro de forma individual ou consolidada em todo o sistema.
 
-### Campos Necessários:
-* **Identificação:**
-  * Razão Social
-  * Nome Fantasia / Nome Usual
-  * CNPJ (com máscara e validação matemática de dígitos verificadores)
-  * Inscrição Estadual (IE)
-  * Inscrição Municipal (IM)
-* **Localização e Endereço:**
-  * CEP (com busca automática por ViaCEP)
-  * Logradouro, Número, Complemento, Bairro, Cidade e UF
-* **Contatos Oficiais:**
-  * Telefone Comercial
-  * WhatsApp de Contato
-  * E-mail Financeiro / Cobrança
-* **Dados Contábeis (Opcionais):**
-  * Nome do Contador / CRC Contador
-
----
-
-## 🖼️ 2. Upload do Logotipo da Empresa (Fase 9)
-**Objetivo:** Personalizar a identidade visual do sistema e dos documentos emitidos para os clientes.
-
-### Requisitos:
-* Campo de upload de imagem (formatos suportados: PNG, JPG, WebP, SVG).
-* Pré-visualização em tempo real (crop/ajuste básico).
-* Armazenamento seguro no banco de dados SQLite (base64 ou blob em tabela de configurações do tenant/sistema).
-* **Renderização Dinâmica:** Inserção automática do logo no cabeçalho do `TransactionDetailModal` / `ReceiptPDF` ao emitir recibos com 1 clique.
+### Requisitos Estratégicos:
+* **Multi-CNPJ:**
+  * Cadastro completo de cada empresa: Razão Social, Nome Fantasia, CNPJ (com validação matemática), IE, IM, Endereço completo (ViaCEP), Telefone, WhatsApp, E-mail e cor de identificação visual.
+  * Upload de Logotipo individual por empresa (PNG, JPG, WebP, SVG) para impressão de recibos com identidade visual própria.
+* **Visão Consolidada vs. Individual (Seletor Global no Header):**
+  * Seletor de empresa no topo do sistema: permite alternar para uma empresa específica ou para `🌐 Todas as Empresas (Visão Consolidada)`.
+  * Dashboard, Gráficos e Contas adaptam-se instantaneamente ao filtro selecionado.
+* **Vínculo por Lançamento:**
+  * Cada conta a pagar/receber registra qual empresa do grupo é responsável (`company_id`).
+  * Na listagem, tags visuais identificam rapidamente a empresa da conta.
+* **Controle de Acesso e Permissões por Usuário (RBAC):**
+  * `Master` e `Admin`: têm acesso irrestrito a todas as empresas do grupo e à visão consolidada.
+  * `User` (Operacional): pode ter seu acesso restrito apenas às empresas autorizadas pelo administrador. Usuários sem permissão não visualizam contas, relatórios nem o CNPJ da empresa bloqueada.
 
 ---
 
