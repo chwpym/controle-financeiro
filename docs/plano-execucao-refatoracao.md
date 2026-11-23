@@ -223,7 +223,9 @@ Permitir a gestão de múltiplos CNPJs (Matriz, Filiais ou diferentes negócios)
   - O popover do sininho exibe os alertas urgentes com limite compacto (3 a 5 itens) filtrados pela empresa selecionada.
   - Link *"Ver todos os avisos"* abre um **Drawer lateral deslizante (Slide-over da direita)** idêntico ao `ContactDrawer.tsx`, com a lista completa de contas vencidas e a vencer, filtros rápidos e botões de baixa imediata (`Pagar` / `Receber`).
 
-### Etapa 9.3: Controle de Acesso, Clonagem de Permissões e Trava de Exclusão (RBAC)
+### Etapa 9.3: Controle de Acesso, Permissões por Empresa (RBAC) e Ajuste dos Modais de Usuário
+- **Correção Visual no Painel Admin (`AdminView.tsx`):**
+  - Exibir as mensagens de erro (ex: validação de usuário sem espaços, senhas curtas) diretamente dentro dos modais de Criar Usuário, Editar e Reset de Senha, em vez de ficarem ocultas atrás do modal escuro.
 - **Regras de Visualização:**
   - Usuários `master` e `admin`: Acesso irrestrito a todas as empresas ativas e à visão consolidada.
   - Usuários operacionais (`user`): Acesso restrito apenas aos CNPJs autorizados no cadastro.
