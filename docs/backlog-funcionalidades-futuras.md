@@ -12,6 +12,7 @@ Este documento consolida os requisitos de negócio, funcionalidades estratégica
 | **Fase 9** | **Multi-Empresas, Visão Consolidada, Logotipos e Permissões** | Múltiplos CNPJs, seletor de empresa (individual ou consolidado), logo nos recibos e permissões por usuário | ⏳ Pronta para Início |
 | **Fase 10** | **Licenciamento & Trava por Tempo de Uso** | Proteção de licença comercial, token assinado, aviso prévio e tela de liberação | 📋 Planejada |
 | **Fase 11** | **Modularização das Telas Restantes** | Decomposição de Contatos, Configurações, Relatórios e Renegociação | 📋 Planejada |
+| **Fase 12** | **Auditoria Geral de Consistência e UI** | Pente fino de padronização em 100% dos botões, inputs, pills, drawers e mensagens | 📋 Planejada |
 
 ---
 
@@ -76,6 +77,15 @@ Este documento consolida os requisitos de negócio, funcionalidades estratégica
 * `SettingsView.tsx` -> Submódulos em `src/components/settings/`
 * `ReportsView.tsx` -> Submódulos em `src/components/reports/`
 * `InstallmentManagerModal.tsx` -> Submódulos em `src/components/installment-manager/`
+
+---
+
+## 🎨 5. Auditoria Geral de Consistência e Padronização do Frontend (Fase 12)
+**Objetivo:** Garantir acabamento de software de classe mundial, com 100% dos componentes e telas obedecendo estritamente aos tokens de design system:
+* **Botões Padronizados:** Todos os botões de ação primária (Gravar/Salvar) em Verde Teal (`bg-teal-700`), secundários em outline neutro e botões de consulta rápida no mesmo estilo.
+* **Controles de Seleção (Pills):** Padronização das pílulas ativas de tipos e classificações em todas as gavetas e tabelas.
+* **Validações e Mensagens:** Garantia de que nenhum erro de validação fique oculto sob modais ou telas escuras.
+* **Tipografia Numérica:** Conferência e aplicação estrita de `font-mono-tabular` em todos os valores, datas e códigos fiscais.
 
 ---
 

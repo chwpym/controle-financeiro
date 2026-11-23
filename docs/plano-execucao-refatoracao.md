@@ -21,9 +21,10 @@ Transformar o **FluxoClaro** em um sistema financeiro modular, de fácil manuten
 [✅ Fase 6: Backend Limpo]    -> Separação do server.ts em arquitetura em camadas modular
 [✅ Fase 7: XML Avançado]     -> Importação de NF-e (Compra/Venda), NFS-e e Modularização
 [✅ Fase 8: Excel Modular]    -> Importação Excel com Drag-and-Drop nativo e Decomposição (< 200 linhas)
-[⏳ Fase 9: Minha Empresa]    -> Cadastro da Empresa Emitente e Logotipo dinâmico nos Recibos
+[⏳ Fase 9: Multi-Empresas]   -> 9.1 e 9.2 Concluídos (Empresas, Seletor, Logo, AlertsDrawer, CNPJ Alfanumérico)
 [📋 Fase 10: Licenciamento]   -> Trava por tempo de uso, chave criptografada e tela de liberação
 [📋 Fase 11: Telas Restantes] -> Modularização de Contatos, Configurações, Relatórios e Renegociação
+[📋 Fase 12: Auditoria UI]    -> Pente fino de padronização em 100% dos botões, inputs, pills e drawers
 ```
 
 ---
@@ -252,6 +253,17 @@ Decomposição dos componentes restantes que ainda excedem 500 linhas:
 - `SettingsView.tsx` (809 linhas).
 - `ReportsView.tsx` (530 linhas).
 - `InstallmentManagerModal.tsx` (700 linhas).
+
+---
+
+## 🎨 FASE 12: Auditoria Geral de Consistência e Padronização do Frontend
+
+Realizar um pente fino em 100% dos componentes de interface para garantir aderência ao Design System (`guia-design-system-e-motion.md`):
+- **Botões:** Unificação estrita de botões primários (Teal `bg-teal-700`), secundários (outline) e botões utilitários de consulta (`[ Consultar ]`).
+- **Controles Segmentados:** Padronização visual de todas as pílulas de seleção (PF/PJ, Cliente/Fornecedor/Ambos, A Pagar/A Receber).
+- **Consistência de Drawers e Modais:** Garantir que todos os drawers e modais tenham o mesmo padrão de abas, espaçamentos, títulos e fechamento no ESC.
+- **Auditoria de Mensagens de Erro:** Varredura para certificar que nenhum erro de validação fique oculto atrás de backdrops ou fora da área visível do formulário.
+- **Tipografia Numérica:** Garantir a presença de `font-mono-tabular` em todas as tabelas, extratos, relatórios e contadores.
 
 ---
 
