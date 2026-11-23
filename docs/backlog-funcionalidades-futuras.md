@@ -8,8 +8,8 @@ Este documento consolida os requisitos de negócio, funcionalidades estratégica
 
 | Fase | Título | Objetivo Principal | Status |
 | :--- | :--- | :--- | :--- |
-| **Fase 8** | **Módulo Excel Avançado & Drag-and-Drop** | Upload por arraste nativo, mapeamento flexível e redução de `ExcelImportModal.tsx` de 824 para < 200 linhas | ⏳ Pronta para Início |
-| **Fase 9** | **Cadastro da Empresa & Logotipo** | Identificação oficial da empresa (CNPJ, IE, Endereço ViaCEP) e logo nos Recibos PDF | 📋 Planejada |
+| **Fase 8** | **Módulo Excel Avançado & Drag-and-Drop** | Upload por arraste nativo, mapeamento flexível e redução de `ExcelImportModal.tsx` de 824 para < 200 linhas | ✅ Concluída |
+| **Fase 9** | **Cadastro da Empresa & Logotipo** | Identificação oficial da empresa (CNPJ, IE, Endereço ViaCEP) e logo nos Recibos PDF | ⏳ Pronta para Início |
 | **Fase 10** | **Licenciamento & Trava por Tempo de Uso** | Proteção de licença comercial, token assinado, aviso prévio e tela de liberação | 📋 Planejada |
 | **Fase 11** | **Modularização das Telas Restantes** | Decomposição de Contatos, Configurações, Relatórios e Renegociação | 📋 Planejada |
 

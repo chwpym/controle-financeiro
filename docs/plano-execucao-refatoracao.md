@@ -20,8 +20,8 @@ Transformar o **FluxoClaro** em um sistema financeiro modular, de fácil manuten
 [✅ Fase 5: Risco Médio]      -> Decomposição do Dashboard em cards modulares
 [✅ Fase 6: Backend Limpo]    -> Separação do server.ts em arquitetura em camadas modular
 [✅ Fase 7: XML Avançado]     -> Importação de NF-e (Compra/Venda), NFS-e e Modularização
-[⏳ Fase 8: Excel Modular]    -> Importação Excel com Drag-and-Drop nativo e Decomposição (< 200 linhas)
-[📋 Fase 9: Minha Empresa]    -> Cadastro da Empresa Emitente e Logotipo dinâmico nos Recibos
+[✅ Fase 8: Excel Modular]    -> Importação Excel com Drag-and-Drop nativo e Decomposição (< 200 linhas)
+[⏳ Fase 9: Minha Empresa]    -> Cadastro da Empresa Emitente e Logotipo dinâmico nos Recibos
 [📋 Fase 10: Licenciamento]   -> Trava por tempo de uso, chave criptografada e tela de liberação
 [📋 Fase 11: Telas Restantes] -> Modularização de Contatos, Configurações, Relatórios e Renegociação
 ```
@@ -160,28 +160,34 @@ Transformar o **FluxoClaro** em um sistema financeiro modular, de fácil manuten
 
 ---
 
-## ⏳ FASE 8: Modularização & Drag-and-Drop do Importador Excel
+## ✅ FASE 8: Concluída com Sucesso (Modularização e Drag-and-Drop do Importador Excel)
 
-Reduzir `ExcelImportModal.tsx` de **824 linhas para menos de 200 linhas**, criando submódulos coesos sob `src/components/excel-import/`:
+`ExcelImportModal.tsx` foi reduzido de **824 linhas para 157 linhas** (< 180 linhas) com suporte nativo completo a **Drag-and-Drop** e arquitetura desacoplada em `src/components/excel-import/`:
 
-### Submódulos a Criar:
+### Entregas Realizadas:
 1. `ExcelDropzone.tsx`:
-   - Área com suporte nativo a **Drag-and-Drop** (`onDragOver`, `onDragLeave`, `onDrop`) aceitando arquivos `.xlsx`, `.xls` e `.csv` diretamente do Windows Explorer sem precisar abrir a caixa de diálogo de arquivos.
-   - Feedback visual imediato de arraste (borda destacada teal, fundo diferenciado e texto dinâmico).
-   - Botão para download da planilha modelo (`downloadExcelImportTemplate`).
+   - Suporte nativo a Drag-and-Drop (`onDragOver`, `onDragLeave`, `onDrop`) e seleção por clique.
+   - Feedback visual imediato com destaque `border-teal-500 bg-teal-50/50 dark:bg-teal-950/20` e texto dinâmico ao arrastar.
+   - Botão para baixar planilha modelo `.xlsx`.
 2. `ExcelSheetSelector.tsx`:
-   - Barra de seleção de aba da planilha (quando o arquivo contém múltiplas abas).
+   - Oculta-se automaticamente quando a planilha possui apenas uma aba; exibe seletor responsivo para planilhas multi-abas.
 3. `ExcelMappingTable.tsx`:
-   - Tabela de mapeamento de colunas com toggles opcionais/obrigatórios (Descrição, Vencimento, Valor, Tipo, Situação, Forma de Pagamento, Categoria, Contato, NF/Documento e Observações).
+   - Gerencia mapeamento obrigatório de Valor e campos opcionais com toggles (`useDescription`, `useDueDate`, `useType`, etc.).
+   - Amostra da 1ª linha da planilha (`sampleOf`) para conferência imediata.
 4. `ExcelDefaultsForm.tsx`:
-   - Seleção de valores padrão para campos não mapeados (Tipo padrão, Situação padrão, Categoria padrão e Contato padrão).
+   - Seleção dinâmica de fallbacks contextuais (Tipo, Situação, Categoria e Contato padrão) apenas para as colunas não mapeadas.
 5. `ExcelPreviewTable.tsx`:
-   - Pré-visualização dos lançamentos gerados com checkboxes de inclusão/exclusão, detecção de contatos novos com botão de autocadastro em lote e totalizadores em BRL (`font-mono-tabular`).
+   - Banners inteligentes com ações em lote: desmarcar duplicatas existentes e autocadastro automático de contatos não encontrados.
+   - Tabela de lançamentos com checkboxes, badges de status, categoria, tipo e valores formatados em BRL (`font-mono-tabular`).
 6. `useExcelImport.ts`:
-   - Hook desacoplado com estado da planilha, análise de colunas, parsing e handlers de submissão.
-7. `index.ts`: Barrel export.
-8. `ExcelImportModal.tsx`: Orquestrador com menos de 200 linhas.
-9. Suíte de testes unitários em `src/components/excel-import/__tests__/excel-import-components.test.tsx`.
+   - Custom hook puro isolando o ciclo de vida, parsing assíncrono com `analyzeExcelBuffer`, cálculos de preview e regras de importação.
+7. `index.ts`: Barrel export modular.
+8. `src/components/excel-import/__tests__/excel-import-components.test.tsx`:
+   - 10 novos testes unitários cobrindo todos os submódulos e comportamentos de importação.
+9. **Validação:**
+   - `npm test`: **88 testes passando (100% verde)** em 9 suítes.
+   - `npm run lint`: **0 erros de TypeScript**.
+   - `ExcelImportModal.tsx`: **157 linhas**.
 
 ---
 
