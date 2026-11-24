@@ -9,8 +9,8 @@ Este documento consolida os requisitos de negócio, funcionalidades estratégica
 | Fase | Título | Objetivo Principal | Status |
 | :--- | :--- | :--- | :--- |
 | **Fase 8** | **Módulo Excel Avançado & Drag-and-Drop** | Upload por arraste nativo, mapeamento flexível e redução de `ExcelImportModal.tsx` de 824 para < 200 linhas | ✅ Concluída |
-| **Fase 9** | **Multi-Empresas, Visão Consolidada, Logotipos e Permissões** | Múltiplos CNPJs, seletor de empresa (individual ou consolidado), logo nos recibos e permissões por usuário | ⏳ Pronta para Início |
-| **Fase 10** | **Licenciamento & Trava por Tempo de Uso** | Proteção de licença comercial, token assinado, aviso prévio e tela de liberação | 📋 Planejada |
+| **Fase 9** | **Multi-Empresas, Visão Consolidada, Logotipos e Permissões** | Múltiplos CNPJs, seletor global, logo nos recibos, RBAC e trava anti-fraude | ✅ Concluída |
+| **Fase 10** | **Central de Atualizações, Deploy Badge & Licenciamento** | Badge no footer, verificação de deploy/PWA, código de liberação e trava de expiração | ⏳ Em Execução (10.1) |
 | **Fase 11** | **Modularização das Telas Restantes** | Decomposição de Contatos, Configurações, Relatórios e Renegociação | 📋 Planejada |
 | **Fase 12** | **Auditoria Geral de Consistência e UI** | Pente fino de padronização em 100% dos botões, inputs, pills, drawers e mensagens | 📋 Planejada |
 
@@ -53,20 +53,31 @@ Este documento consolida os requisitos de negócio, funcionalidades estratégica
 
 ---
 
-## 🔐 3. Licenciamento, Chave de Ativação e Trava por Tempo de Uso (Fase 10)
-**Objetivo:** Mecanismo de liberação e controle de licença de uso do software (SaaS / Desktop / On-Premise), com bloqueio automático após o vencimento do prazo acordado.
+## 🚀 3. Central de Atualizações, Deploy Badge & Licenciamento por Tempo de Uso (Fase 10)
+**Objetivo:** Governança de versão, eliminação de gargalos de cache do PWA e controle comercial de liberação do software (SaaS / On-Premise) com bloqueio pós-vencimento:
 
-### Requisitos:
-* **Chave Criptografada (License Key / Token):**
-  * Contém payload assinado criptograficamente (HMAC / AES) com:
-    * ID do Cliente / CNPJ
-    * Data de Expiração da Licença (ex: `validUntil: '2026-12-31'`)
-    * Módulos habilitados
+### 3.1. Central de Atualizações & Deploy Badge no Footer (Passo 10.1):
+* **Injeção Automática de Versão e Commit:**
+  * Configuração no build (Vite) para injetar automaticamente `__APP_VERSION__`, `__COMMIT_HASH__` (via Git ou `RENDER_GIT_COMMIT`) e `__BUILD_TIME__`.
+  * Endpoint leve de verificação `/api/version` no Express.
+* **Badge Discreto no Footer:**
+  * Posicionado no rodapé da aplicação: `v1.9.3 • 1b9a829` acompanhado de um indicador verde de status (*Conectado*).
+  * Ao clicar no badge, abre a **Central de Atualizações** (em modal ou gaveta deslizante elegante).
+* **Painel da Central de Atualizações:**
+  * Resumo com Versão Instalada, Commit Ativo, Data do Deploy e Status do Banco SQLite.
+  * Botão `[ 🔄 Verificar Novas Atualizações ]`: consulta a API e o Service Worker. Se houver deploy novo concluído no Render mas o navegador ainda estiver com código em cache, exibe aviso imediato.
+  * Botão `[ 🚀 Atualizar Sistema Agora ]`: esvazia caches do Service Worker e recarrega a página com o bundle mais recente sem perder a sessão.
+  * Log de diagnóstico visual e lista com o que há de novo nas últimas entregas.
+
+### 3.2. Licenciamento & Liberação do Sistema (Passo 10.2):
+* **Chave Criptografada (Código de Liberação / Token):**
+  * Contém payload assinado criptograficamente (HMAC / AES) atrelado ao CNPJ da empresa, data do sistema e validade acordada.
 * **Comportamento do Sistema:**
-  * **Alerta Prévio:** Quando faltarem X dias para vencer (ex: 5 dias antes), exibe um banner no topo avisando: *"Sua licença expira em X dias. Entre em contato para renovar."*
-  * **Ao Expirar (Bloqueio):** Bloqueia as ações de escrita (não permite criar novos lançamentos nem exportações), redirecionando para a tela **"Liberação do Sistema"**.
+  * **Alerta Prévio:** Quando faltarem X dias para expirar (ex: 5 dias antes), exibe alerta sutil de renovação.
+  * **Ao Expirar (Bloqueio):** Bloqueia ações de escrita (inserção, edição e exclusão), exibindo a tela de bloqueio com redirecionamento para liberação.
 * **Tela de Liberação do Sistema:**
-  * Campo para o administrador colar a nova chave de ativação fornecida pelo desenvolvedor/suporte.
+  * Modal com Data do Sistema, CNPJ ativo e campo formatado `Código de Liberação: [ - - - - - - ]`.
+  * Botões `[ Confirmar ]` e `[ Abandonar ]`.
   * Validação instantânea da chave e desbloqueio imediato do sistema sem perda de dados.
 
 ---
@@ -89,4 +100,17 @@ Este documento consolida os requisitos de negócio, funcionalidades estratégica
 
 ---
 
-*Atualizado em 23/11/2026 para alinhamento com o Plano Mestre de Execução e Arquitetura Ponytail.*
+## 💼 6. Módulos Financeiros Avançados (Roadmap Pós-Fase 12)
+Funcionalidades estratégicas catalogadas a partir de práticas consagradas de ERP e automação financeira:
+* **Cobrança & Alertas via WhatsApp:**
+  * Comunicação e envio automático de avisos de vencimento preventivo e notificações de contas vencidas diretamente para clientes via WhatsApp.
+* **PIX Integrado e Recibos com QR Code:**
+  * Geração e impressão de PIX Copia e Cola / QR Code dinâmico vinculado a duplicatas, recibos de caixa e faturas.
+* **Comunicação Bancária CNAB (Layouts 240 e 400):**
+  * Geração de arquivos de remessa bancária e leitura/conciliação de retorno bancário com detecção de títulos não encontrados e liquidação automática.
+* **Demonstrativo das Movimentações Financeiras & Implantação de Saldos:**
+  * Módulo dedicado para implantação de saldos bancários e de caixa iniciais por conta, com DFC (Demonstrativo de Fluxo de Caixa) contábil/gerencial.
+
+---
+
+*Atualizado em 24/11/2026 para alinhamento com a Fase 10 (Central de Atualizações + Licenciamento) e Backlog Estratégico.*

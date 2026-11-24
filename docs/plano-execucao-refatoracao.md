@@ -22,7 +22,7 @@ Transformar o **FluxoClaro** em um sistema financeiro modular, de fácil manuten
 [✅ Fase 7: XML Avançado]     -> Importação de NF-e (Compra/Venda), NFS-e e Modularização
 [✅ Fase 8: Excel Modular]    -> Importação Excel com Drag-and-Drop nativo e Decomposição (< 200 linhas)
 [✅ Fase 9: Multi-Empresas]   -> Concluída com Sucesso (9.1, 9.2 e 9.3: Entidades, RBAC, CNPJ Alfanumérico, Trava Anti-Fraude e Modais)
-[📋 Fase 10: Licenciamento]   -> Trava por tempo de uso, chave criptografada e tela de liberação
+[⏳ Fase 10: Central & Licença]-> 10.1 Central de Atualizações, Deploy Badge no Footer e Auto-Update; 10.2 Liberação do Sistema
 [📋 Fase 11: Telas Restantes] -> Modularização de Contatos, Configurações, Relatórios e Renegociação
 [📋 Fase 12: Auditoria UI]    -> Pente fino de padronização em 100% dos botões, inputs, pills e drawers
 ```
@@ -239,13 +239,33 @@ Permitir a gestão de múltiplos CNPJs (Matriz, Filiais ou diferentes negócios)
 
 ---
 
-## 📋 FASE 10: Sistema de Licenciamento & Trava por Tempo de Uso
+## 📋 FASE 10: Central de Atualizações, Deploy Badge & Licenciamento por Tempo de Uso
 
-Implementar proteção e gestão de licença para comercialização do software (SaaS / On-Premise):
-- Token de licença criptografado assinado (HMAC/AES) com expiração, CNPJ e módulos ativos.
-- Alerta preventivo com contagem regressiva quando a licença estiver próxima do vencimento.
-- Bloqueio de ações de escrita ao expirar com redirecionamento para tela de Liberação.
-- Modal/Tela de Liberação para colar nova chave de ativação sem interrupção de dados.
+Implementar governança de versões, eliminação de problemas de cache do PWA no navegador e proteção/gestão de licença comercial (SaaS / On-Premise):
+
+### 📋 Etapa 10.1: Central de Atualizações, Deploy Badge no Footer & Auto-Update do PWA
+- **Injeção Automática no Build (Vite + Git / Render):**
+  - Injeção das constantes globais `__APP_VERSION__`, `__COMMIT_HASH__` (extraído via `git rev-parse --short HEAD` com fallback para `process.env.RENDER_GIT_COMMIT`) e `__BUILD_TIME__`.
+  - Endpoint Express `GET /api/version` retornando versão, hash do commit e status da base SQLite.
+- **Badge Discreto no Footer:**
+  - Posicionado no rodapé da página: `v1.9.3 • 1b9a829` acompanhado de bolinha indicadora de conexão (*Online* / *Offline*).
+  - Clique no badge abre a **Central de Atualizações**.
+- **Painel Central de Atualizações:**
+  - Resumo de integridade: Versão instalada, Commit ativo no Render, Data/Hora da compilação e Integridade do banco SQLite.
+  - Botão `[ 🔄 Verificar Novas Atualizações ]`: consulta a API do servidor e o Service Worker do PWA para detectar se há deploy novo pronto no Render.
+  - Botão `[ 🚀 Atualizar Sistema Agora ]`: esvazia caches do Service Worker e recarrega a página instantaneamente, garantindo a execução do código mais recente sem telas antigas.
+  - Log visual do diagnóstico de atualização e lista resumida de melhorias recentes (Changelog).
+
+### 📋 Etapa 10.2: Sistema de Licenciamento, Trava por Tempo de Uso e Liberação do Sistema
+- **Chave Criptografada (Código de Liberação / Token):**
+  - Token assinado com HMAC/AES atrelado ao CNPJ da empresa, data do sistema e validade acordada.
+- **Comportamento do Sistema e Alertas:**
+  - Alerta preventivo com contagem regressiva quando a licença estiver próxima do vencimento (ex: 5 dias antes).
+  - Ao expirar: bloqueio total de operações de escrita (inserção, edição e exclusão de contas e contatos) com redirecionamento para liberação.
+- **Modal / Tela de Liberação do Sistema:**
+  - Exibição de Data do Sistema, CNPJ ativo e campo formatado `Código de Liberação: [ - - - - - - ]`.
+  - Botões `[ Confirmar ]` e `[ Abandonar ]`.
+  - Validação instantânea da chave com desbloqueio imediato do sistema sem perda de dados.
 
 ---
 
