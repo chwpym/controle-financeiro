@@ -11,18 +11,50 @@ import {VitePWA} from 'vite-plugin-pwa';
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 
 /**
- * Resolve the application semantic version from package.json.
- * Resolve a versão semântica da aplicação a partir do arquivo package.json.
+ * Resolve the application semantic version automatically using `<major>.<minor>` from `package.json`
+ * combined with the Git commit count (`git rev-list --count HEAD`) as the patch number (e.g., `1.10.26`).
+ * Falls back gracefully to the exact `package.json` version when Git history is unavailable or inside Vitest child workers.
+ *
+ * Resolve automaticamente a versão semântica combinando `<major>.<minor>` do `package.json` com a
+ * contagem total de commits do Git (`git rev-list --count HEAD`) no último dígito (ex: `1.10.26`).
+ * Assim, todo novo `git commit` incrementa a versão sozinho sem precisar editar arquivos manualmente.
  */
-function resolveAppVersion(): string {
+function resolveAppVersion(skipSubprocess = false): string {
+  let baseVersion = '1.10.2';
   try {
     const pkgPath = path.resolve(rootDir, 'package.json');
     const pkgRaw = fs.readFileSync(pkgPath, 'utf-8');
     const pkg = JSON.parse(pkgRaw) as { version?: string };
-    return pkg.version?.trim() || '1.10.1';
+    if (pkg.version?.trim()) {
+      baseVersion = pkg.version.trim();
+    }
   } catch {
-    return '1.10.1';
+    // Keep fallback baseVersion / Mantém baseVersion padrão
   }
+
+  if (skipSubprocess) {
+    return baseVersion;
+  }
+
+  try {
+    const commitCountRaw = execSync('git rev-list --count HEAD', {
+      cwd: rootDir,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+      .toString()
+      .trim();
+    const commitCount = Number.parseInt(commitCountRaw, 10);
+    if (Number.isFinite(commitCount) && commitCount > 0) {
+      const parts = baseVersion.split('.');
+      const major = parts[0] || '1';
+      const minor = parts[1] || '10';
+      return `${major}.${minor}.${commitCount}`;
+    }
+  } catch {
+    // Fallback to package.json version when .git is absent / Fallback para package.json caso .git não esteja disponível
+  }
+
+  return baseVersion;
 }
 
 /**
@@ -59,7 +91,7 @@ export default defineConfig(({ mode }) => {
 
   // Build metadata constants injected into the frontend bundle at compile time
   // Constantes de metadados do build injetadas globalmente no bundle do frontend em tempo de compilação
-  const appVersion = resolveAppVersion();
+  const appVersion = resolveAppVersion(isVitestWorker);
   const commitHash = resolveCommitHash(isVitestWorker);
   const buildTime = new Date().toISOString();
 

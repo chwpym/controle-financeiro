@@ -453,9 +453,10 @@ export function ensureMasterSeed(): void {
   `).run(masterId, 'master', 'Administrador Master', hashPassword('master123'), now, now);
 
   const catIds = seedDefaultCategoriesForUser(masterId);
-  seedDefaultCompanyForUser(masterId);
+  const defaultCompanyId = seedDefaultCompanyForUser(masterId);
 
   // Seed clean initial contacts and sample monthly entries for immediate dashboard visualization
+  // Semeia contatos iniciais e lançamentos de exemplo já vinculados ao `defaultCompanyId` (FluxoClaro Matriz)
   const c1 = crypto.randomUUID();
   const c2 = crypto.randomUUID();
   const insertContact = db.prepare(`
@@ -489,44 +490,44 @@ export function ensureMasterSeed(): void {
   const groupId = crypto.randomUUID();
   const insertTx = db.prepare(`
     INSERT INTO transactions (
-      id, user_id, type, description, amount_cents, due_date, paid_at, status, payment_method,
+      id, user_id, company_id, type, description, amount_cents, due_date, paid_at, status, payment_method,
       category_id, contact_id, document_number, installment_group_id,
       installment_number, installment_total, notes, source, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   insertTx.run(
-    crypto.randomUUID(), masterId, 'receivable', 'Consultoria Mensal — Contrato 01',
+    crypto.randomUUID(), masterId, defaultCompanyId, 'receivable', 'Consultoria Mensal — Contrato 01',
     850000, `${yyyy}-${mm}-05`, `${yyyy}-${mm}-05`, 'settled', 'PIX',
     catIds['Serviços Prestados'], c2, 'NF-1042', null, 1, 1, 'Recebido via PIX', 'manual', now, now
   );
   insertTx.run(
-    crypto.randomUUID(), masterId, 'receivable', 'Projeto de Implantação — Etapa 2',
+    crypto.randomUUID(), masterId, defaultCompanyId, 'receivable', 'Projeto de Implantação — Etapa 2',
     420000, soonStr, null, 'pending', '',
     catIds['Vendas de Produtos'], c2, 'NF-1055', null, 1, 1, '', 'manual', now, now
   );
   insertTx.run(
-    crypto.randomUUID(), masterId, 'payable', 'Aluguel Escritório Comercial',
+    crypto.randomUUID(), masterId, defaultCompanyId, 'payable', 'Aluguel Escritório Comercial',
     240000, todayStr, null, 'pending', '',
     catIds['Aluguel e Condomínio'], c1, 'REC-09', null, 1, 1, 'Vence hoje', 'manual', now, now
   );
   insertTx.run(
-    crypto.randomUUID(), masterId, 'payable', 'Compra de Equipamentos (Parcela 1/2)',
+    crypto.randomUUID(), masterId, defaultCompanyId, 'payable', 'Compra de Equipamentos (Parcela 1/2)',
     150000, `${yyyy}-${mm}-18`, null, 'pending', '',
     catIds['Fornecedores'], c1, 'NFe-8821', groupId, 1, 2, 'Parcelado em 2x', 'manual', now, now
   );
   insertTx.run(
-    crypto.randomUUID(), masterId, 'payable', 'Compra de Equipamentos (Parcela 2/2)',
+    crypto.randomUUID(), masterId, defaultCompanyId, 'payable', 'Compra de Equipamentos (Parcela 2/2)',
     150000, `${nextYm}-18`, null, 'pending', '',
     catIds['Fornecedores'], c1, 'NFe-8821', groupId, 2, 2, 'Parcelado em 2x', 'manual', now, now
   );
   insertTx.run(
-    crypto.randomUUID(), masterId, 'receivable', 'Faturamento Anterior',
+    crypto.randomUUID(), masterId, defaultCompanyId, 'receivable', 'Faturamento Anterior',
     680000, `${prevYm}-20`, `${prevYm}-20`, 'settled', 'Transferência (TED/DOC)',
     catIds['Vendas de Produtos'], c2, 'NF-0991', null, 1, 1, '', 'manual', now, now
   );
   insertTx.run(
-    crypto.randomUUID(), masterId, 'payable', 'Fornecedores Mês Anterior',
+    crypto.randomUUID(), masterId, defaultCompanyId, 'payable', 'Fornecedores Mês Anterior',
     310000, `${prevYm}-12`, `${prevYm}-12`, 'settled', 'Boleto',
     catIds['Fornecedores'], c1, 'NFe-8700', null, 1, 1, '', 'manual', now, now
   );
@@ -548,9 +549,25 @@ try {
   for (const u of existingUsers) {
     seedDefaultCompanyForUser(u.id);
   }
-  // EN: Seed 365-day licenses for all companies without license on server startup.
-  // PT: Semeia licenças de 365 dias para todas as empresas sem licença ao iniciar o servidor.
+  // EN: Seed FULL licenses for all companies without license on server startup.
+  // PT: Semeia licenças para todas as empresas sem licença ao iniciar o servidor.
   seedDefaultLicenses();
+
+  // EN: Safe idempotent migration (v1.10.2) linking legacy orphan transactions (null/empty company_id)
+  //     to their owner's default main company (e.g. FluxoClaro Matriz), so all historical entries and
+  //     due-date alerts show up both in the individual Matriz view and in "All Companies".
+  // PT: Migração segura e idempotente (v1.10.2) vinculando lançamentos antigos sem empresa (`company_id` nulo/vazio)
+  //     à empresa padrão (`is_default = 1`) do respectivo usuário, garantindo que contas anteriores e avisos de
+  //     vencimento apareçam tanto na visão individual da Matriz quanto em "Todas as Empresas".
+  db.exec(`
+    UPDATE transactions
+    SET company_id = (
+      SELECT id FROM companies
+      WHERE companies.user_id = transactions.user_id AND is_default = 1
+      LIMIT 1
+    )
+    WHERE company_id IS NULL OR company_id = '';
+  `);
 } catch {
   // Safe fallback
 }

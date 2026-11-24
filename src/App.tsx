@@ -4,7 +4,6 @@ import {
   BarChart3,
   ChevronLeft,
   ChevronRight,
-  Key,
   KeyRound,
   LayoutDashboard,
   ListChecks,
@@ -75,6 +74,7 @@ import {
   saveSession,
   saveSnapshotCache,
 } from './utils/offlineDb';
+import { getLocalBuildInfo } from './utils/pwaUpdate';
 
 const THEME_KEY = 'fluxoclaro_theme';
 const LEAD_DAYS_KEY = 'fluxoclaro_notify_days';
@@ -83,6 +83,9 @@ const SIDEBAR_COLLAPSED_KEY = 'sidebar_collapsed';
 
 export default function App() {
   const isOnline = useOnlineStatus();
+  // EN: Compile-time version & commit hash displayed discreetly in the sidebar footer.
+  // PT: Versão e hash do commit injetados no build, exibidos discretamente no rodapé da barra lateral.
+  const localBuildInfo = useMemo(() => getLocalBuildInfo(), []);
 
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     try {
@@ -908,21 +911,11 @@ export default function App() {
 
         <div
           className={`border-t border-slate-200 dark:border-slate-800 ${
-            sidebarCollapsed ? 'p-3 space-y-2 flex flex-col items-center' : 'p-4 space-y-3'
+            sidebarCollapsed ? 'p-3 space-y-2 flex flex-col items-center' : 'p-4 space-y-2.5'
           }`}
         >
           {sidebarCollapsed ? (
             <>
-              <button
-                type="button"
-                onClick={() => setSystemReleaseOpen(true)}
-                title="Liberação do Sistema"
-                aria-label="Liberação do Sistema"
-                data-testid="sidebar-open-system-release"
-                className="w-10 h-10 flex items-center justify-center rounded-xl text-teal-700 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-950/50 cursor-pointer"
-              >
-                <Key className="w-4 h-4" />
-              </button>
               <button
                 type="button"
                 onClick={() => setChangePassOpen(true)}
@@ -940,6 +933,23 @@ export default function App() {
                 className="w-10 h-10 flex items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
               >
                 <LogOut className="w-4 h-4" />
+              </button>
+              {/* Subtle semi-opaque version badge when sidebar is collapsed / Versão meio opaca na sidebar recolhida */}
+              <button
+                type="button"
+                onClick={() => setUpdateCenterOpen(true)}
+                title={`v${localBuildInfo.version} • ${localBuildInfo.commit} — Abrir Central de Atualizações`}
+                aria-label={`Versão ${localBuildInfo.version}, abrir Central de Atualizações`}
+                data-testid="sidebar-version-badge"
+                className="w-full inline-flex items-center justify-center gap-1 text-[10px] font-mono text-slate-400 dark:text-slate-500 opacity-60 hover:opacity-100 transition-opacity cursor-pointer text-center py-1.5"
+              >
+                <span
+                  aria-hidden="true"
+                  className={`inline-block h-1.5 w-1.5 rounded-full shrink-0 ${
+                    isOnline ? 'bg-emerald-500' : 'bg-amber-500'
+                  }`}
+                />
+                <span>v{localBuildInfo.version}</span>
               </button>
             </>
           ) : (
@@ -967,16 +977,6 @@ export default function App() {
                   <KeyRound className="w-4 h-4" />
                 </button>
               </div>
-              {/* Desktop Sidebar Shortcut to System Release / Atalho no menu lateral para Liberação do Sistema */}
-              <button
-                type="button"
-                onClick={() => setSystemReleaseOpen(true)}
-                data-testid="sidebar-open-system-release"
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-teal-200 dark:border-teal-800/80 bg-teal-50/50 dark:bg-teal-950/30 text-xs font-semibold text-teal-800 dark:text-teal-300 hover:bg-teal-100/70 dark:hover:bg-teal-900/40 min-h-[38px] cursor-pointer"
-              >
-                <Key className="w-3.5 h-3.5" />
-                Liberação do Sistema
-              </button>
               <button
                 type="button"
                 onClick={handleLogout}
@@ -984,6 +984,25 @@ export default function App() {
               >
                 <LogOut className="w-3.5 h-3.5" />
                 Sair
+              </button>
+              {/* Subtle semi-opaque version & online status indicator opening UpdateCenterModal */}
+              {/* Indicador discreto e meio opaco de versão e status online abrindo a Central de Atualizações */}
+              <button
+                type="button"
+                onClick={() => setUpdateCenterOpen(true)}
+                title="Abrir Central de Atualizações & Diagnóstico"
+                data-testid="sidebar-version-badge"
+                className="w-full inline-flex items-center justify-center gap-1.5 text-[11px] font-mono text-slate-400 dark:text-slate-500 opacity-60 hover:opacity-100 transition-opacity cursor-pointer text-center py-2"
+              >
+                <span
+                  aria-hidden="true"
+                  className={`inline-block h-2 w-2 rounded-full shrink-0 ${
+                    isOnline ? 'bg-emerald-500' : 'bg-amber-500'
+                  }`}
+                />
+                <span>
+                  v{localBuildInfo.version} • {localBuildInfo.commit}
+                </span>
               </button>
             </>
           )}
@@ -1428,19 +1447,6 @@ export default function App() {
                 <div className="font-mono-tabular text-slate-500">@{user.username}</div>
               </div>
               <PWAInstallButton />
-              {/* Mobile shortcut to open System Release / Atalho no menu lateral mobile para Liberação do Sistema */}
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  setSystemReleaseOpen(true);
-                }}
-                data-testid="mobile-open-system-release"
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-xl border border-teal-200 dark:border-teal-800/80 bg-teal-50/50 dark:bg-teal-950/30 text-teal-800 dark:text-teal-300 text-xs font-semibold min-h-[42px]"
-              >
-                <Key className="w-4 h-4 text-teal-700 dark:text-teal-400" />
-                Liberação do Sistema
-              </button>
               {/* Mobile shortcut to open Update Center / Atalho no menu lateral mobile para a Central de Atualizações */}
               <button
                 type="button"

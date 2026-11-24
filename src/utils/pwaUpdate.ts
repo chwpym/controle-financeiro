@@ -33,7 +33,7 @@ export interface VersionCheckResult {
  * Lê de forma segura as constantes injetadas pelo Vite no momento do build, garantindo fallback seguro em testes.
  */
 export function getLocalBuildInfo(): { version: string; commit: string; buildTime: string } {
-  const version = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.10.1';
+  const version = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.10.2';
   const commit = typeof __COMMIT_HASH__ !== 'undefined' ? __COMMIT_HASH__ : 'dev';
   const buildTime =
     typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : new Date().toISOString();

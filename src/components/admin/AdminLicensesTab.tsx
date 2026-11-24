@@ -1,20 +1,26 @@
 /**
  * src/components/admin/AdminLicensesTab.tsx
  *
- * EN: "Licenças & Assinaturas" tab in the Master/Admin panel (Phase 10.2).
+ * EN: "Licenças & Assinaturas" tab in the Master/Admin panel (Phase 10.2 — UX Polish v1.10.2).
  *     Displays all client companies, their formatted CNPJs, expiration dates, days remaining,
  *     and status badges (*Ativa*, *A Vencer*, *Expirada*).
- *     Provides 1-click instant cloud renewal (`[ +30 Dias ]`) and emergency signed code generation
- *     (`[ 🔑 Gerar Código ]`) with automatic clipboard copy for WhatsApp customer support.
+ *     Provides:
+ *     - 1-click instant cloud renewal (`[ +30 Dias ]`).
+ *     - `[ 🔑 Gerar Código ]` button opening a quick Validity Selector Modal/Popover with preset
+ *       chips (`7`, `15`, `30` default, `90`, `365` days), custom numeric day input, and
+ *       `[ Gerar e Copiar Código ]` confirmation with automatic clipboard copy and visual feedback.
  *
- * PT: Aba "Licenças & Assinaturas" do Painel Administrativo Master (Fase 10.2).
+ * PT: Aba "Licenças & Assinaturas" do Painel Administrativo Master (Fase 10.2 — Polimento v1.10.2).
  *     Lista todas as empresas clientes, seus CNPJs, datas de vencimento, dias restantes e badges
  *     de status (*Ativa*, *A Vencer* ou *Expirada*).
- *     Oferece o botão rápido `[ +30 Dias ]` (renova na hora com 1 clique na nuvem sem código)
- *     e o botão `[ 🔑 Gerar Código ]` (gera e copia chave criptográfica de emergência para envio via WhatsApp).
+ *     Oferece:
+ *     - Botão rápido `[ +30 Dias ]` (renova na hora com 1 clique na nuvem sem código).
+ *     - Botão `[ 🔑 Gerar Código ]` que abre um seletor rápido de validade com pílulas prontas
+ *       (`7 Dias` Degustação, `15 Dias`, `30 Dias` Mensal padrão, `90 Dias` Trimestral, `365 Dias` Anual),
+ *       campo numérico livre para dias personalizados e confirmação `[ Gerar e Copiar Código ]`.
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import {
   AlertTriangle,
   CalendarPlus,
@@ -24,11 +30,24 @@ import {
   KeyRound,
   Loader2,
   RefreshCw,
+  X,
   XCircle,
 } from 'lucide-react';
 import type { AdminLicenseRow } from '../../types';
 import { api, ApiError } from '../../utils/api';
 import { formatDateBR } from '../../utils/format';
+
+/**
+ * EN: Quick preset chips for license validity selection in the Master code generator.
+ * PT: Opções rápidas em pílulas (chips) para escolha de validade no gerador de chaves do Master.
+ */
+const LICENSE_DAY_PRESETS: ReadonlyArray<{ days: number; label: string; hint: string }> = [
+  { days: 7, label: '7 Dias', hint: 'Degustação' },
+  { days: 15, label: '15 Dias', hint: 'Quinzenal' },
+  { days: 30, label: '30 Dias', hint: 'Mensal' },
+  { days: 90, label: '90 Dias', hint: 'Trimestral' },
+  { days: 365, label: '365 Dias', hint: 'Anual' },
+];
 
 interface AdminLicensesTabProps {
   /** Notification toast callback / Callback para disparar toast de notificação */
@@ -41,20 +60,31 @@ export const AdminLicensesTab: React.FC<AdminLicensesTabProps> = ({
   onNotify,
   onLicenseChanged,
 }) => {
+  const generatorDialogTitleId = useId();
+  const customDaysInputId = useId();
+  const generatorDialogRef = useRef<HTMLDialogElement | null>(null);
+
   const [licenses, setLicenses] = useState<AdminLicenseRow[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [renewingId, setRenewingId] = useState<string | null>(null);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
 
-  // EN: Stores the most recently generated emergency release key so Master can also view/copy it visually.
-  // PT: Armazena o último código de emergência gerado para exibição visual imediata e cópia rápida.
+  // EN: State for the quick Validity Selector modal opened when clicking `[ 🔑 Gerar Código ]`.
+  // PT: Estados do seletor rápido de validade aberto ao clicar em `[ 🔑 Gerar Código ]`.
+  const [generatorTarget, setGeneratorTarget] = useState<AdminLicenseRow | null>(null);
+  const [selectedDays, setSelectedDays] = useState<number>(30);
+  const [customDaysRaw, setCustomDaysRaw] = useState<string>('30');
+
+  // EN: Stores the most recently generated emergency release key so Master can view/copy it visually.
+  // PT: Armazena o último código de emergência gerado para exibição visual imediata, data de validade e cópia rápida.
   const [generatedCodeInfo, setGeneratedCodeInfo] = useState<{
     companyId: string;
     companyName: string;
     cnpj: string;
     licenseKey: string;
     validUntil: string;
+    days: number;
     copied: boolean;
   } | null>(null);
 
@@ -83,6 +113,50 @@ export const AdminLicensesTab: React.FC<AdminLicensesTabProps> = ({
     loadLicenses();
   }, [loadLicenses]);
 
+  // EN: Synchronize native `<dialog>` open/close lifecycle when `generatorTarget` changes.
+  // PT: Sincroniza a abertura e fechamento do `<dialog>` nativo do seletor de validade.
+  useEffect(() => {
+    const dialog = generatorDialogRef.current;
+    if (!dialog) return;
+    if (generatorTarget) {
+      if (typeof dialog.showModal === 'function' && !dialog.open) {
+        try {
+          dialog.showModal();
+        } catch {
+          dialog.setAttribute('open', '');
+        }
+      } else if (!dialog.open) {
+        dialog.setAttribute('open', '');
+      }
+    } else if (dialog.open) {
+      if (typeof dialog.close === 'function') {
+        dialog.close();
+      } else {
+        dialog.removeAttribute('open');
+      }
+    }
+  }, [generatorTarget]);
+
+  /**
+   * EN: Opens the Validity Selector modal for a company defaulting to 30 days (Monthly).
+   * PT: Abre o seletor rápido de dias para a empresa selecionada, com 30 dias (Mensal) selecionado por padrão.
+   */
+  const handleOpenCodeGenerator = (row: AdminLicenseRow) => {
+    setError(null);
+    setSelectedDays(30);
+    setCustomDaysRaw('30');
+    setGeneratorTarget(row);
+  };
+
+  /**
+   * EN: Updates both the numeric state and raw input when clicking a preset chip.
+   * PT: Atualiza os dias selecionados e o campo numérico ao clicar em uma pílula rápida.
+   */
+  const handleSelectPresetDays = (days: number) => {
+    setSelectedDays(days);
+    setCustomDaysRaw(String(days));
+  };
+
   /**
    * EN: 1-click cloud renewal (`+30 Dias`) calling `POST /api/admin/licenses/renew`.
    * PT: Renovação rápida na nuvem com 1 clique (`+30 Dias`) via `POST /api/admin/licenses/renew`.
@@ -109,14 +183,24 @@ export const AdminLicensesTab: React.FC<AdminLicensesTabProps> = ({
   };
 
   /**
-   * EN: Generates a 30-day signed emergency release key and copies it to the clipboard.
-   * PT: Gera um código de liberação assinado (+30 dias) e copia automaticamente para a área de transferência.
+   * EN: Confirms generation of the signed release code for `chosenDays` days, copies it to the clipboard,
+   *     closes the selector modal, and displays visual copy feedback + expiration date.
+   * PT: Confirma a geração do código assinado para a quantidade de dias escolhida (`chosenDays`),
+   *     copia automaticamente para a área de transferência e exibe o feedback visual com a data de validade.
    */
-  const handleGenerateCode = async (row: AdminLicenseRow) => {
+  const handleConfirmGenerateAndCopy = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!generatorTarget) return;
+
+    const parsedDays = Math.trunc(Number(customDaysRaw));
+    const chosenDays = Number.isFinite(parsedDays) && parsedDays >= 1 ? Math.min(3650, parsedDays) : selectedDays;
+
+    const row = generatorTarget;
     setGeneratingId(row.companyId);
     setError(null);
+
     try {
-      const res = await api.generateLicenseCode(row.companyId, 30);
+      const res = await api.generateLicenseCode(row.companyId, chosenDays);
       let copied = false;
       try {
         if (navigator?.clipboard?.writeText) {
@@ -133,13 +217,18 @@ export const AdminLicensesTab: React.FC<AdminLicensesTabProps> = ({
         cnpj: row.cnpj,
         licenseKey: res.licenseKey,
         validUntil: res.validUntil,
+        days: chosenDays,
         copied,
       });
 
+      setGeneratorTarget(null);
+
       onNotify(
         copied
-          ? `Código ${res.licenseKey} gerado e copiado para enviar ao cliente!`
-          : `Código de liberação gerado: ${res.licenseKey}`
+          ? `Código ${res.licenseKey} (+${chosenDays} dias · até ${formatDateBR(
+              res.validUntil
+            )}) gerado e copiado!`
+          : `Código gerado (+${chosenDays} dias · até ${formatDateBR(res.validUntil)}): ${res.licenseKey}`
       );
     } catch (err) {
       setError(
@@ -192,7 +281,7 @@ export const AdminLicensesTab: React.FC<AdminLicensesTabProps> = ({
         </div>
       )}
 
-      {/* Generated Emergency Code Card / Destaque do Código de Emergência Gerado */}
+      {/* Generated Emergency Code Card / Destaque Visual do Código Gerado, Cópia e Validade */}
       {generatedCodeInfo && (
         <div
           data-testid="generated-license-card"
@@ -202,11 +291,11 @@ export const AdminLicensesTab: React.FC<AdminLicensesTabProps> = ({
             <div className="text-xs font-semibold text-teal-900 dark:text-teal-200 flex items-center gap-1.5">
               <KeyRound className="w-4 h-4 text-teal-700 dark:text-teal-400" aria-hidden="true" />
               <span>
-                Chave de Emergência — {generatedCodeInfo.companyName} ({generatedCodeInfo.cnpj})
+                Chave de Liberação (+{generatedCodeInfo.days} dias) — {generatedCodeInfo.companyName} ({generatedCodeInfo.cnpj})
               </span>
             </div>
             <div className="text-[11px] text-slate-600 dark:text-slate-300">
-              Válida até <strong>{formatDateBR(generatedCodeInfo.validUntil)}</strong> · Envie ao cliente para digitar em <em>Liberação do Sistema</em>:
+              Válida até <strong data-testid="generated-license-valid-until">{formatDateBR(generatedCodeInfo.validUntil)}</strong> · Envie ao cliente para digitar em <em>Liberação do Sistema</em>:
             </div>
           </div>
 
@@ -228,6 +317,7 @@ export const AdminLicensesTab: React.FC<AdminLicensesTabProps> = ({
                   // ignore
                 }
               }}
+              data-testid="copy-generated-code-btn"
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold min-h-[38px] cursor-pointer"
             >
               {generatedCodeInfo.copied ? (
@@ -254,7 +344,7 @@ export const AdminLicensesTab: React.FC<AdminLicensesTabProps> = ({
               Gestão de Licenças &amp; Assinaturas por Empresa
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Renove mensalidades em 1 clique na nuvem ou emita chaves assinadas para liberação manual pelo WhatsApp.
+              Renove mensalidades em 1 clique na nuvem ou emita chaves assinadas com validade personalizada para envio pelo WhatsApp.
             </p>
           </div>
 
@@ -334,7 +424,7 @@ export const AdminLicensesTab: React.FC<AdminLicensesTabProps> = ({
                           <button
                             type="button"
                             disabled={isGenerating}
-                            onClick={() => handleGenerateCode(lic)}
+                            onClick={() => handleOpenCodeGenerator(lic)}
                             aria-label={`Gerar código de liberação para ${lic.tradeName || lic.legalName}`}
                             data-testid={`generate-code-${lic.companyId}`}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold min-h-[36px] cursor-pointer disabled:opacity-60 transition-colors"
@@ -356,6 +446,146 @@ export const AdminLicensesTab: React.FC<AdminLicensesTabProps> = ({
           </table>
         </div>
       </div>
+
+      {/* Quick Validity Selector Modal / Popover Rápido de Escolha de Validade para Geração de Código */}
+      {generatorTarget && (
+        <dialog
+          ref={generatorDialogRef}
+          aria-labelledby={generatorDialogTitleId}
+          {...({ closedby: 'any' } as Record<string, string>)}
+          onCancel={() => setGeneratorTarget(null)}
+          onClose={() => {
+            if (generatorDialogRef.current) {
+              generatorDialogRef.current.returnValue = '';
+            }
+          }}
+          data-testid="license-code-generator-modal"
+          className="fixed inset-0 z-50 m-auto w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-0 text-slate-900 dark:text-slate-100 shadow-2xl backdrop:bg-black/50 backdrop:backdrop-blur-xs open:flex open:flex-col"
+        >
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 rounded-t-2xl">
+            <div className="flex items-center gap-2">
+              <KeyRound className="w-4 h-4 text-teal-700 dark:text-teal-400" aria-hidden="true" />
+              <h1
+                id={generatorDialogTitleId}
+                className="text-sm font-display font-bold text-slate-900 dark:text-white"
+              >
+                Gerar Código de Liberação
+              </h1>
+            </div>
+            <button
+              type="button"
+              onClick={() => setGeneratorTarget(null)}
+              aria-label="Fechar seletor de validade"
+              className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+            >
+              <X className="w-4 h-4" aria-hidden="true" />
+            </button>
+          </div>
+
+          <form onSubmit={handleConfirmGenerateAndCopy} className="p-5 space-y-4">
+            {/* Target Company Summary */}
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 px-3.5 py-2.5 text-xs space-y-0.5">
+              <div className="font-semibold text-slate-900 dark:text-white">
+                {generatorTarget.tradeName || generatorTarget.legalName}
+              </div>
+              <div className="font-mono-tabular text-slate-500 dark:text-slate-400">
+                CNPJ: {generatorTarget.cnpj} · Venc. atual: {formatDateBR(generatorTarget.validUntil)}
+              </div>
+            </div>
+
+            {/* Preset Validity Chips / Pílulas Rápidas de Dias */}
+            <div>
+              <div className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                Escolha o período de liberação:
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {LICENSE_DAY_PRESETS.map((preset) => {
+                  const isActive = Number(customDaysRaw) === preset.days;
+                  return (
+                    <button
+                      key={preset.days}
+                      type="button"
+                      onClick={() => handleSelectPresetDays(preset.days)}
+                      data-testid={`preset-days-${preset.days}`}
+                      className={`flex flex-col items-center justify-center px-3 py-2 rounded-xl border text-xs transition-colors cursor-pointer min-h-[48px] ${
+                        isActive
+                          ? 'bg-teal-700 dark:bg-teal-600 text-white border-teal-700 dark:border-teal-600 font-semibold shadow-2xs'
+                          : 'bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      <span className="font-mono-tabular font-bold">{preset.label}</span>
+                      <span
+                        className={`text-[10px] ${
+                          isActive ? 'text-teal-100' : 'text-slate-400 dark:text-slate-500'
+                        }`}
+                      >
+                        {preset.hint}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Custom Numeric Days Input / Campo Numérico Personalizado */}
+            <div>
+              <label
+                htmlFor={customDaysInputId}
+                className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1"
+              >
+                Ou digite dias personalizados (ex: 45, 60, 180):
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  id={customDaysInputId}
+                  type="number"
+                  min={1}
+                  max={3650}
+                  step={1}
+                  value={customDaysRaw}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCustomDaysRaw(val);
+                    const num = Math.trunc(Number(val));
+                    if (Number.isFinite(num) && num >= 1) {
+                      setSelectedDays(Math.min(3650, num));
+                    }
+                  }}
+                  data-testid="custom-days-input"
+                  className="w-28 px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm font-mono-tabular font-semibold text-center text-slate-900 dark:text-white min-h-[42px]"
+                />
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  dia(s) de validade a adicionar na chave
+                </span>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setGeneratorTarget(null)}
+                className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 min-h-[40px] cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={Boolean(generatingId)}
+                data-testid="confirm-generate-and-copy-btn"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold min-h-[40px] cursor-pointer disabled:opacity-60 transition-colors"
+              >
+                {generatingId ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" aria-hidden="true" />
+                )}
+                <span>Gerar e Copiar Código</span>
+              </button>
+            </div>
+          </form>
+        </dialog>
+      )}
     </div>
   );
 };

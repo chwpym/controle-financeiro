@@ -111,7 +111,7 @@ describe('UpdateCenterModal & DeployFooter (Fase 10.1)', () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        version: '1.10.2',
+        version: '1.10.3',
         commit: 'ff8899a',
         buildTime: '2026-11-24T17:00:00.000Z',
         serverTime: '2026-11-24T17:05:00.000Z',
@@ -149,7 +149,7 @@ describe('UpdateCenterModal & DeployFooter (Fase 10.1)', () => {
     fireEvent.click(screen.getByTestId('check-updates-button'));
 
     const banner = await screen.findByTestId('update-available-banner');
-    expect(banner).toHaveTextContent('v1.10.2 • ff8899a');
+    expect(banner).toHaveTextContent('v1.10.3 • ff8899a');
 
     const applyBtn = screen.getByTestId('apply-update-button');
     expect(applyBtn).toHaveTextContent(/Atualizar Sistema Agora/i);

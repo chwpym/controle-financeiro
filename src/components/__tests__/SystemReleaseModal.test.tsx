@@ -307,4 +307,95 @@ describe('SystemReleaseModal & Gestão Master de Licenças (Fase 10.2)', () => {
     expect(onLicenseChangedMock).toHaveBeenCalledTimes(1);
     expect(await screen.findByText(/Ativa \(32d\)/i)).toBeInTheDocument();
   });
+
+  it('abre o seletor de validade ao clicar em [🔑 Gerar Código], permite escolher pílulas ou dias personalizados e copia a chave', async () => {
+    const masterUser: UserProfile = {
+      id: 'master-1',
+      username: 'master',
+      displayName: 'Administrador Master',
+      role: 'master',
+      status: 'active',
+      createdAt: '2026-01-01T00:00:00Z',
+      lastLoginAt: null,
+      canDelete: true,
+    };
+
+    const summary: AdminSummary = {
+      totalUsers: 1,
+      activeUsers: 1,
+      suspendedUsers: 0,
+      masterAndAdminCount: 1,
+      totalTransactions: 10,
+      totalPendingCents: 100000,
+    };
+
+    const row: AdminLicenseRow = {
+      companyId: 'comp-main',
+      legalName: 'FluxoClaro Tecnologia Financeira Ltda',
+      tradeName: 'FluxoClaro Matriz (Demo Full)',
+      cnpj: 'FC.202.6BR/0001-64',
+      validUntil: '2026-11-30',
+      daysRemaining: 6,
+      isValid: true,
+      isExpired: false,
+      licenseStatus: 'active',
+      updatedAt: '2026-11-24T10:00:00Z',
+    };
+
+    const writeTextMock = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: writeTextMock },
+    });
+
+    (api.getAdminUsers as any).mockResolvedValue({ users: [], summary });
+    (api.getCompanies as any).mockResolvedValue({ companies: [mockCompany] });
+    (api.getAdminLicenses as any).mockResolvedValue({
+      licenses: [row],
+      systemDate: '2026-11-24',
+    });
+    (api.generateLicenseCode as any).mockResolvedValueOnce({
+      licenseKey: '039K-ABCD-EFGH-IJKL',
+      validUntil: '2027-02-28',
+      cnpj: 'FC.202.6BR/0001-64',
+      companyName: 'FluxoClaro Matriz (Demo Full)',
+    });
+
+    const onNotifyMock = vi.fn();
+
+    render(<AdminView currentUser={masterUser} onNotify={onNotifyMock} />);
+
+    fireEvent.click(await screen.findByTestId('admin-tab-licenses'));
+
+    // Clica em [🔑 Gerar Código]
+    const openGenBtn = await screen.findByTestId('generate-code-comp-main');
+    fireEvent.click(openGenBtn);
+
+    // Modal de seleção de validade deve abrir com 30 dias selecionado por padrão
+    expect(await screen.findByTestId('license-code-generator-modal')).toBeInTheDocument();
+    const customInput = screen.getByTestId('custom-days-input') as HTMLInputElement;
+    expect(customInput.value).toBe('30');
+
+    // Verifica presença das 5 pílulas (7, 15, 30, 90, 365) e clica em [90 Dias] (Trimestral)
+    expect(screen.getByTestId('preset-days-7')).toBeInTheDocument();
+    expect(screen.getByTestId('preset-days-15')).toBeInTheDocument();
+    expect(screen.getByTestId('preset-days-30')).toBeInTheDocument();
+    expect(screen.getByTestId('preset-days-365')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('preset-days-90'));
+    expect(customInput.value).toBe('90');
+
+    // Clica em [Gerar e Copiar Código]
+    fireEvent.click(screen.getByTestId('confirm-generate-and-copy-btn'));
+
+    await waitFor(() => {
+      expect(api.generateLicenseCode).toHaveBeenCalledWith('comp-main', 90);
+    });
+
+    expect(writeTextMock).toHaveBeenCalledWith('039K-ABCD-EFGH-IJKL');
+    expect(await screen.findByTestId('generated-license-key-value')).toHaveTextContent(
+      '039K-ABCD-EFGH-IJKL'
+    );
+    expect(screen.getByTestId('generated-license-valid-until')).toHaveTextContent('28/02/2027');
+  });
 });
