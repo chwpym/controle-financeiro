@@ -100,14 +100,22 @@ Este documento consolida os requisitos de negócio, funcionalidades estratégica
 
 ---
 
-## 💼 6. Módulos Financeiros Avançados (Roadmap Pós-Fase 12)
+## 💼 6. Módulos Financeiros Avançados & SaaS Billing (Roadmap Pós-Fase 12)
 Funcionalidades estratégicas catalogadas a partir de práticas consagradas de ERP e automação financeira:
+* **Assinatura Recorrente da Licença do Software (SaaS Billing com Webhooks):**
+  * Integração com gateways de pagamento brasileiros (Asaas, Mercado Pago ou EFI/Gerencianet).
+  * Emissão de cobrança automática por Pix com QR Code Copia e Cola, Boleto Bancário ou Cartão de Crédito.
+  * Webhook automatizado: ao receber confirmação de pagamento do gateway, chama `renewCompanyLicense(companyId, 30)` e estende a validade do cliente em 3 segundos sem intervenção manual.
 * **Cobrança & Alertas via WhatsApp:**
   * Comunicação e envio automático de avisos de vencimento preventivo e notificações de contas vencidas diretamente para clientes via WhatsApp.
 * **PIX Integrado e Recibos com QR Code:**
   * Geração e impressão de PIX Copia e Cola / QR Code dinâmico vinculado a duplicatas, recibos de caixa e faturas.
 * **Comunicação Bancária CNAB (Layouts 240 e 400):**
   * Geração de arquivos de remessa bancária e leitura/conciliação de retorno bancário com detecção de títulos não encontrados e liquidação automática.
+* **Conciliação Bancária Avançada (Extratos OFX & CSV):**
+  * Importação de arquivos `.OFX` e `.CSV` de bancos com tela de conciliação lado a lado e matching automático de lançamentos.
+* **Demonstrativo das Movimentações Financeiras & Implantação de Saldos:**
+  * Módulo dedicado para implantação de saldos bancários e de caixa iniciais por conta, com DFC (Demonstrativo de Fluxo de Caixa) contábil/gerencial.
 * **Demonstrativo das Movimentações Financeiras & Implantação de Saldos:**
   * Módulo dedicado para implantação de saldos bancários e de caixa iniciais por conta, com DFC (Demonstrativo de Fluxo de Caixa) contábil/gerencial.
 

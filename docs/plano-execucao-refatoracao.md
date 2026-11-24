@@ -257,15 +257,20 @@ Implementar governança de versões, eliminação de problemas de cache do PWA n
 - **Validação:** 112 testes passando no Vitest (100% verde em 14 suítes), 0 erros de TypeScript (`npm run lint`).
 
 ### 📋 Etapa 10.2: Sistema de Licenciamento, Trava por Tempo de Uso e Liberação do Sistema
-- **Chave Criptografada (Código de Liberação / Token):**
-  - Token assinado com HMAC/AES atrelado ao CNPJ da empresa, data do sistema e validade acordada.
+- **Motor de Licença & SQLite (`server/db.ts` & `server/licenseEngine.ts`):**
+  - Tabela `system_license` associando `company_id`, `cnpj`, `license_key`, `valid_until` e `is_active`.
+  - Função interna desacoplada `renewCompanyLicense(companyId, days)` para renovações em lote, acionada com 1 clique pelo Master e pronta para integração futura com Webhooks de pagamento (Pix/Boleto/Cartão via Asaas/Mercado Pago).
+  - Seed automático de licença inicial de 365 dias para empresas existentes garantindo continuidade operacional nos testes.
+- **Algoritmo Criptográfico do Código de Liberação (HMAC-SHA256):**
+  - Geração e validação matemática de chaves formatadas em blocos `[ XXXX - XXXX - XXXX - XXXX ]` vinculadas ao CNPJ da empresa e data de expiração.
+  - Script utilitário no servidor para emissão ágil de códigos de emergência pelo suporte.
 - **Comportamento do Sistema e Alertas:**
-  - Alerta preventivo com contagem regressiva quando a licença estiver próxima do vencimento (ex: 5 dias antes).
-  - Ao expirar: bloqueio total de operações de escrita (inserção, edição e exclusão de contas e contatos) com redirecionamento para liberação.
-- **Modal / Tela de Liberação do Sistema:**
-  - Exibição de Data do Sistema, CNPJ ativo e campo formatado `Código de Liberação: [ - - - - - - ]`.
-  - Botões `[ Confirmar ]` e `[ Abandonar ]`.
-  - Validação instantânea da chave com desbloqueio imediato do sistema sem perda de dados.
+  - Alerta preventivo no topo (`App.tsx`) com contagem regressiva quando a licença estiver a 5 dias ou menos do vencimento.
+  - Ao expirar: bloqueio total de operações de escrita financeira (`POST`, `PUT`, `DELETE`), preservando consultas e relatórios históricos e exibindo a tela de liberação.
+- **Modal / Tela de Liberação do Sistema (`SystemReleaseModal.tsx`):**
+  - Componente fiel à referência com Data do Sistema, CNPJ ativo, campo formatado `Código de Liberação: [ - - - - - - ]` e botões `[ Confirmar ]` e `[ Abandonar ]`.
+- **Gestão de Licenças no Painel Master (`AdminView.tsx`):**
+  - Seção ou aba exclusiva para o Usuário Master visualizar o vencimento de cada empresa/cliente e renovar com 1 clique (`[ +30 Dias ]`) ou gerar código de emergência.
 
 ---
 
