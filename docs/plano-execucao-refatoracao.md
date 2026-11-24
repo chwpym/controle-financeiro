@@ -243,18 +243,18 @@ Permitir a gestão de múltiplos CNPJs (Matriz, Filiais ou diferentes negócios)
 
 Implementar governança de versões, eliminação de problemas de cache do PWA no navegador e proteção/gestão de licença comercial (SaaS / On-Premise):
 
-### 📋 Etapa 10.1: Central de Atualizações, Deploy Badge no Footer & Auto-Update do PWA
+### ✅ Etapa 10.1: Concluída com Sucesso (Central de Atualizações, Deploy Badge no Footer & Auto-Update do PWA)
 - **Injeção Automática no Build (Vite + Git / Render):**
-  - Injeção das constantes globais `__APP_VERSION__`, `__COMMIT_HASH__` (extraído via `git rev-parse --short HEAD` com fallback para `process.env.RENDER_GIT_COMMIT`) e `__BUILD_TIME__`.
-  - Endpoint Express `GET /api/version` retornando versão, hash do commit e status da base SQLite.
-- **Badge Discreto no Footer:**
-  - Posicionado no rodapé da página: `v1.9.3 • 1b9a829` acompanhado de bolinha indicadora de conexão (*Online* / *Offline*).
-  - Clique no badge abre a **Central de Atualizações**.
-- **Painel Central de Atualizações:**
-  - Resumo de integridade: Versão instalada, Commit ativo no Render, Data/Hora da compilação e Integridade do banco SQLite.
-  - Botão `[ 🔄 Verificar Novas Atualizações ]`: consulta a API do servidor e o Service Worker do PWA para detectar se há deploy novo pronto no Render.
-  - Botão `[ 🚀 Atualizar Sistema Agora ]`: esvazia caches do Service Worker e recarrega a página instantaneamente, garantindo a execução do código mais recente sem telas antigas.
-  - Log visual do diagnóstico de atualização e lista resumida de melhorias recentes (Changelog).
+  - Injeção das constantes globais `__APP_VERSION__` (`1.10.1`), `__COMMIT_HASH__` (extraído via `process.env.RENDER_GIT_COMMIT` com fallback para `git rev-parse --short HEAD`) e `__BUILD_TIME__` em `vite.config.ts` e declarações TypeScript em `src/vite-env.d.ts`.
+  - Endpoint Express `GET /api/version` em `server/routes/version.ts` retornando versão, hash do commit, horários de build/servidor e integridade da base SQLite (`healthy`).
+- **Utilitário de Atualização e Cache (`src/utils/pwaUpdate.ts`):**
+  - Funções `checkServerVersion()` e `forcePwaRefresh()` com limpeza completa do Cache Storage, atualização do Service Worker e recarregamento limpo.
+- **Badge Discreto no Footer (`src/components/DeployFooter.tsx` & `src/App.tsx`):**
+  - Barra de rodapé com `FluxoClaro © 2026 · Gestão Financeira`, bolinha pulsante de conexão (*Online* / *Offline*), `v1.10.1 • <commit>` e pílula `[ Atualizações ]`.
+  - Atalhos adicionais no menu lateral mobile e na aba de Configurações (`SettingsView.tsx`).
+- **Painel Central de Atualizações (`src/components/UpdateCenterModal.tsx`):**
+  - Gaveta lateral moderna com 3 cards: Status Atual do Sistema, Verificação de Atualizações com console visual de diagnóstico e O Que Há de Novo (Changelog).
+- **Validação:** 112 testes passando no Vitest (100% verde em 14 suítes), 0 erros de TypeScript (`npm run lint`).
 
 ### 📋 Etapa 10.2: Sistema de Licenciamento, Trava por Tempo de Uso e Liberação do Sistema
 - **Chave Criptografada (Código de Liberação / Token):**

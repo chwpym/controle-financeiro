@@ -10,6 +10,7 @@ import {
   Menu,
   Moon,
   RefreshCw,
+  Rocket,
   Settings,
   Shield,
   Sun,
@@ -25,6 +26,7 @@ import { CompanySelector } from './components/common/CompanySelector';
 import { ContactsView } from './components/ContactsView';
 import { AlertsDrawer } from './components/dashboard/AlertsDrawer';
 import { DashboardView } from './components/DashboardView';
+import { DeployFooter } from './components/DeployFooter';
 import { ExcelImportModal } from './components/ExcelImportModal';
 import { InstallmentManagerModal } from './components/InstallmentManagerModal';
 import { NotificationsBell } from './components/NotificationsBell';
@@ -35,6 +37,7 @@ import { SettleModal } from './components/SettleModal';
 import { TransactionDetailModal } from './components/TransactionDetailModal';
 import { TransactionModal } from './components/TransactionModal';
 import { TransactionsView } from './components/TransactionsView';
+import { UpdateCenterModal } from './components/UpdateCenterModal';
 import { XmlImportModal } from './components/XmlImportModal';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import type {
@@ -144,6 +147,8 @@ export default function App() {
   const [excelModalOpen, setExcelModalOpen] = useState(false);
   const [changePassOpen, setChangePassOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  // Controls visibility of the Update Center & System Diagnostics slide-over / Estado de abertura da Central de Atualizações
+  const [updateCenterOpen, setUpdateCenterOpen] = useState(false);
 
   // Toast message
   const [toast, setToast] = useState<string | null>(null);
@@ -1182,6 +1187,7 @@ export default function App() {
                   onRestoreBackup={handleRestoreLocalBackup}
                   onOpenChangePassword={() => setChangePassOpen(true)}
                   onCompaniesChange={setCompanies}
+                  onOpenUpdateCenter={() => setUpdateCenterOpen(true)}
                 />
               )}
 
@@ -1190,6 +1196,12 @@ export default function App() {
               )}
             </>
           )}
+
+          {/* Deploy Badge Footer (Version, Commit, Online Status & Update Center trigger) / Rodapé com Badge de Versão e Status */}
+          <DeployFooter
+            isOnline={isOnline}
+            onOpenUpdateCenter={() => setUpdateCenterOpen(true)}
+          />
         </main>
       </div>
 
@@ -1271,6 +1283,19 @@ export default function App() {
                 <div className="font-mono-tabular text-slate-500">@{user.username}</div>
               </div>
               <PWAInstallButton />
+              {/* Mobile shortcut to open Update Center / Atalho no menu lateral mobile para a Central de Atualizações */}
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  setUpdateCenterOpen(true);
+                }}
+                data-testid="mobile-open-update-center"
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold min-h-[42px]"
+              >
+                <Rocket className="w-4 h-4 text-teal-700 dark:text-teal-400" />
+                Central de Atualizações
+              </button>
               <button
                 type="button"
                 onClick={() => {
@@ -1388,6 +1413,13 @@ export default function App() {
           onSuccess={showToast}
         />
       )}
+
+      {/* Update Center & System Diagnostics Modal / Gaveta da Central de Atualizações & Diagnóstico */}
+      <UpdateCenterModal
+        isOpen={updateCenterOpen}
+        onClose={() => setUpdateCenterOpen(false)}
+        isOnline={isOnline}
+      />
 
       {/* Toast Notification */}
       {toast && (

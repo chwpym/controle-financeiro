@@ -11,6 +11,7 @@ import {
   Moon,
   Palette,
   Plus,
+  Rocket,
   Search,
   Shield,
   SlidersHorizontal,
@@ -43,6 +44,8 @@ interface SettingsViewProps {
   onRestoreBackup: (payload: LocalBackupPayload) => Promise<void>;
   onOpenChangePassword: () => void;
   onCompaniesChange?: (companies: Company[]) => void;
+  /** Opens the Update Center & System Diagnostics slide-over / Abre a Central de Atualizações e Diagnóstico */
+  onOpenUpdateCenter?: () => void;
 }
 
 const COLOR_PRESETS = [
@@ -82,6 +85,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onRestoreBackup,
   onOpenChangePassword,
   onCompaniesChange,
+  onOpenUpdateCenter,
 }) => {
   // Create form
   const [catName, setCatName] = useState('');
@@ -826,6 +830,29 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </div>
               <PWAInstallButton />
             </div>
+
+            {/* Shortcut to open the Update Center & PWA Cache Diagnostics / Atalho para abrir a Central de Atualizações */}
+            {onOpenUpdateCenter && (
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-medium text-slate-900 dark:text-white">
+                    Atualizações &amp; Diagnóstico
+                  </div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                    Verificar versão ativa, limpar cache do PWA e histórico de releases
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={onOpenUpdateCenter}
+                  data-testid="settings-open-update-center"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 min-h-[40px] shrink-0 cursor-pointer"
+                >
+                  <Rocket className="w-3.5 h-3.5 text-teal-700 dark:text-teal-400" />
+                  <span>Central de Atualizações</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
 

@@ -1,6 +1,7 @@
 /// <reference types="vitest/config" />
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import {fileURLToPath} from 'url';
@@ -9,10 +10,65 @@ import {VitePWA} from 'vite-plugin-pwa';
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 
+/**
+ * Resolve the application semantic version from package.json.
+ * Resolve a versão semântica da aplicação a partir do arquivo package.json.
+ */
+function resolveAppVersion(): string {
+  try {
+    const pkgPath = path.resolve(rootDir, 'package.json');
+    const pkgRaw = fs.readFileSync(pkgPath, 'utf-8');
+    const pkg = JSON.parse(pkgRaw) as { version?: string };
+    return pkg.version?.trim() || '1.10.1';
+  } catch {
+    return '1.10.1';
+  }
+}
+
+/**
+ * Resolve the active short Git commit hash (Render CI/CD env first, local git fallback).
+ * Captura o hash curto do Git Commit atual priorizando RENDER_GIT_COMMIT no deploy do Render
+ * e utilizando fallback para o comando local `git rev-parse --short HEAD` (ou 'dev').
+ * Em workers filhos do Vitest, evita disparar múltiplos subprocessos simultâneos no Windows.
+ */
+function resolveCommitHash(skipSubprocess = false): string {
+  const renderCommit = process.env.RENDER_GIT_COMMIT?.trim();
+  if (renderCommit) {
+    return renderCommit.slice(0, 7);
+  }
+  if (skipSubprocess) {
+    return 'dev';
+  }
+  try {
+    return (
+      execSync('git rev-parse --short HEAD', {
+        cwd: rootDir,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      })
+        .toString()
+        .trim() || 'dev'
+    );
+  } catch {
+    return 'dev';
+  }
+}
+
 export default defineConfig(({ mode }) => {
   const isTest = mode === 'test' || Boolean(process.env.VITEST);
+  const isVitestWorker = Boolean(process.env.VITEST_WORKER_ID || process.env.VITEST_POOL_ID);
+
+  // Build metadata constants injected into the frontend bundle at compile time
+  // Constantes de metadados do build injetadas globalmente no bundle do frontend em tempo de compilação
+  const appVersion = resolveAppVersion();
+  const commitHash = resolveCommitHash(isVitestWorker);
+  const buildTime = new Date().toISOString();
 
   return {
+    define: {
+      __APP_VERSION__: JSON.stringify(appVersion),
+      __COMMIT_HASH__: JSON.stringify(commitHash),
+      __BUILD_TIME__: JSON.stringify(buildTime),
+    },
     plugins: [
       react(),
       ...(!isTest
@@ -135,6 +191,9 @@ export default defineConfig(({ mode }) => {
       environment: 'jsdom',
       setupFiles: './src/setupTests.ts',
       pool: 'forks',
+      // Limita workers simultâneos no Windows para evitar timeout de inicialização de processos forks
+      // Limits concurrent fork workers on Windows to prevent worker startup timeouts under heavy load
+      maxWorkers: 2,
     },
   };
 });

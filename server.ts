@@ -12,6 +12,7 @@ import categoryRouter from './server/routes/categories';
 import companyRouter from './server/routes/companies';
 import contactRouter from './server/routes/contacts';
 import transactionRouter from './server/routes/transactions';
+import versionRouter from './server/routes/version';
 
 dotenv.config();
 
@@ -24,7 +25,8 @@ const IS_PROD = process.env.NODE_ENV === 'production' || process.argv.includes('
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 
-// API Routers
+// API Routers (Rotas modulares da API REST, incluindo diagnóstico de versão e saúde)
+app.use('/api', versionRouter);
 app.use('/api/auth', authRouter);
 app.use('/api', bootstrapRouter);
 app.use('/api/transactions', transactionRouter);
