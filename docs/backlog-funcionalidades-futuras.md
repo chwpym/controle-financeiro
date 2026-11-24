@@ -10,8 +10,8 @@ Este documento consolida os requisitos de negócio, funcionalidades estratégica
 | :--- | :--- | :--- | :--- |
 | **Fase 8** | **Módulo Excel Avançado & Drag-and-Drop** | Upload por arraste nativo, mapeamento flexível e redução de `ExcelImportModal.tsx` de 824 para < 200 linhas | ✅ Concluída |
 | **Fase 9** | **Multi-Empresas, Visão Consolidada, Logotipos e Permissões** | Múltiplos CNPJs, seletor global, logo nos recibos, RBAC e trava anti-fraude | ✅ Concluída |
-| **Fase 10** | **Central de Atualizações, Deploy Badge & Licenciamento** | Badge no footer, verificação de deploy/PWA, código de liberação e trava de expiração | ⏳ Em Execução (10.1) |
-| **Fase 11** | **Modularização das Telas Restantes** | Decomposição de Contatos, Configurações, Relatórios e Renegociação | 📋 Planejada |
+| **Fase 10** | **Central de Atualizações, Deploy Badge & Licenciamento** | Badge no footer, verificação de deploy/PWA, código de liberação e trava de expiração | ✅ Concluída |
+| **Fase 11** | **Modularização das Telas Restantes & Refinamento Fiscal do XML** | Decomposição de telas grandes e inteligência de cruzamento de CNPJ (Minha Empresa vs Fornecedor) no XML | ⏳ Próxima (Amanhã) |
 | **Fase 12** | **Auditoria Geral de Consistência e UI** | Pente fino de padronização em 100% dos botões, inputs, pills, drawers e mensagens | 📋 Planejada |
 
 ---
@@ -82,8 +82,15 @@ Este documento consolida os requisitos de negócio, funcionalidades estratégica
 
 ---
 
-## 🧱 4. Modularização das Telas Restantes (Fase 11)
-**Objetivo:** Concluir a decomposição arquitetural das telas que ainda possuem mais de 500 linhas, garantindo manutenibilidade e escalabilidade futura:
+## 🧱 4. Modularização das Telas Restantes & Inteligência Fiscal de XML (Fase 11)
+**Objetivo:** Concluir a decomposição arquitetural das telas que ainda possuem mais de 500 linhas e refinar o importador XML para diferenciar perfeitamente "Minhas Empresas" de "Contatos (Fornecedor/Cliente)":
+* **Inteligência de CNPJ no XML (Cenário Fortlub / Genuína):**
+  * Quando um XML é importado e nenhuma das empresas (nem Emitente nem Destinatário) estiver previamente cadastrada no sistema:
+    * O sistema deve identificar com clareza o papel de cada parte:
+      1. **Destinatário (Comprador)**: Opção de cadastrar como **"Minha Empresa"** (`companies`), ou vincular a uma empresa existente do usuário.
+      2. **Emitente (Vendedor)**: Cadastrar na tabela de **Contatos** como **"Fornecedor"** (`contacts`, `kind: 'supplier'`).
+      3. **Operação**: Definir automaticamente como **Conta a Pagar**.
+    * Cada entidade entra na sua tabela e funcionalidade correta, sem misturar empresas do sistema com contatos de fornecedor!
 * `ContactsView.tsx` e `ContactDrawer.tsx` -> Submódulos em `src/components/contacts/`
 * `SettingsView.tsx` -> Submódulos em `src/components/settings/`
 * `ReportsView.tsx` -> Submódulos em `src/components/reports/`
