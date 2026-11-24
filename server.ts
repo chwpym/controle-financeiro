@@ -11,6 +11,7 @@ import bootstrapRouter from './server/routes/bootstrap';
 import categoryRouter from './server/routes/categories';
 import companyRouter from './server/routes/companies';
 import contactRouter from './server/routes/contacts';
+import { adminLicenseRouter, licenseRouter } from './server/routes/license';
 import transactionRouter from './server/routes/transactions';
 import versionRouter from './server/routes/version';
 
@@ -34,6 +35,8 @@ app.use('/api/contacts', contactRouter);
 app.use('/api/categories', categoryRouter);
 app.use('/api/companies', companyRouter);
 app.use('/api/backup', backupRouter);
+app.use('/api/license', licenseRouter);
+app.use('/api/admin/licenses', adminLicenseRouter);
 app.use('/api/admin', adminRouter);
 
 async function startServer() {

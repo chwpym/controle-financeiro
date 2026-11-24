@@ -1,10 +1,15 @@
 import crypto from 'node:crypto';
-import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { DATA_DIR } from './config';
 import { hashPassword } from './crypto';
+import {
+  addDaysToISODate,
+  calculateDaysRemaining,
+  generateLicenseCode,
+  getSystemDateISO,
+  normalizeLicenseCnpj,
+} from './licenseEngine';
 
 export { DATA_DIR } from './config';
 
@@ -121,7 +126,6 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_contacts_user ON contacts(user_id);
   CREATE INDEX IF NOT EXISTS idx_categories_user ON categories(user_id);
   CREATE INDEX IF NOT EXISTS idx_companies_user ON companies(user_id);
-  CREATE INDEX IF NOT EXISTS idx_tx_company ON transactions(user_id, company_id);
 `);
 
 // Safe migrations for existing SQLite databases
@@ -147,6 +151,7 @@ if (!txColumns.some((col) => col.name === 'issue_date')) {
 if (!txColumns.some((col) => col.name === 'company_id')) {
   db.exec('ALTER TABLE transactions ADD COLUMN company_id TEXT');
 }
+db.exec('CREATE INDEX IF NOT EXISTS idx_tx_company ON transactions(user_id, company_id)');
 
 /**
  * Phase 9.3 — Per-company user access (RBAC) table.
@@ -170,6 +175,22 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_uca_user ON user_company_access(user_id);
   CREATE INDEX IF NOT EXISTS idx_uca_company ON user_company_access(company_id);
+
+  -- Phase 10.2 — System Licensing table per company/CNPJ
+  -- Fase 10.2 — Tabela de licenciamento do sistema vinculada por empresa/CNPJ
+  CREATE TABLE IF NOT EXISTS system_licenses (
+    id TEXT PRIMARY KEY,
+    company_id TEXT NOT NULL,
+    cnpj TEXT NOT NULL,
+    license_key TEXT NOT NULL,
+    valid_until TEXT NOT NULL, -- Formato ISO YYYY-MM-DD
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_lic_company ON system_licenses(company_id);
+  CREATE INDEX IF NOT EXISTS idx_lic_cnpj ON system_licenses(cnpj);
 `);
 
 /**
@@ -198,6 +219,15 @@ if (!userColumns.some((col) => col.name === 'can_delete')) {
   }
 }
 
+/**
+ * EN: Fictional RFB Alphanumeric CNPJ (IN RFB nº 2.229/2024) with valid Modulo-11 check digits (64)
+ *     used for the default demonstration/test company with FULL license.
+ * PT: CNPJ fictício no novo padrão Alfanumérico da Receita Federal (IN RFB nº 2.229/2024) com
+ *     dígitos verificadores Módulo-11 válidos (64), utilizado na empresa de demonstração com Licença FULL.
+ */
+export const DEMO_ALPHANUMERIC_CNPJ = 'FC.202.6BR/0001-64';
+export const FULL_LICENSE_DAYS = 3650; // 10 anos (Licença FULL para testes e operação contínua)
+
 export function seedDefaultCompanyForUser(userId: string): string {
   const existing = db.prepare('SELECT id FROM companies WHERE user_id = ? LIMIT 1').get(userId) as { id: string } | undefined;
   if (existing) return existing.id;
@@ -216,25 +246,176 @@ export function seedDefaultCompanyForUser(userId: string): string {
   `).run(
     companyId,
     userId,
-    'Minha Empresa Principal Ltda',
-    'Minha Empresa Principal',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
+    'FluxoClaro Tecnologia Financeira Ltda',
+    'FluxoClaro Matriz (Demo Full)',
+    DEMO_ALPHANUMERIC_CNPJ,
+    'ISENTO',
+    '102030-4',
+    'financeiro@fluxoclaro.exemplo.br',
+    '(11) 4000-1020',
+    '(11) 99000-1020',
+    '01310-100',
+    'Av. Paulista',
+    '1578',
+    'Andar 12',
+    'Bela Vista',
+    'São Paulo',
+    'SP',
     now,
     now
   );
+  // EN: Automatically provision a FULL active license (3,650 days / 10 years) for the demo company.
+  // PT: Provisiona automaticamente uma Licença FULL ativa (3.650 dias / 10 anos) para a empresa de teste.
+  ensureLicenseForCompany(companyId, FULL_LICENSE_DAYS);
   return companyId;
+}
+
+/**
+ * EN: Structure representing a persisted company license row in SQLite.
+ * PT: Interface representando o registro persistido na tabela `system_licenses` do SQLite.
+ */
+export interface DbSystemLicense {
+  id: string;
+  company_id: string;
+  cnpj: string;
+  license_key: string;
+  valid_until: string;
+  is_active: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * EN: Ensures a company has a license record in `system_licenses`; creates one valid for `initialDays` if missing.
+ * PT: Garante que uma empresa possua licença registrada em `system_licenses`; cria uma válida por `initialDays` caso não exista.
+ */
+export function ensureLicenseForCompany(companyId: string, initialDays = 365): DbSystemLicense | null {
+  const company = db
+    .prepare('SELECT id, document FROM companies WHERE id = ?')
+    .get(companyId) as { id: string; document: string } | undefined;
+  if (!company) return null;
+
+  const existing = db
+    .prepare('SELECT * FROM system_licenses WHERE company_id = ? ORDER BY updated_at DESC LIMIT 1')
+    .get(companyId) as DbSystemLicense | undefined;
+  if (existing) return existing;
+
+  const today = getSystemDateISO();
+  const validUntil = addDaysToISODate(today, initialDays);
+  const cleanCnpj = normalizeLicenseCnpj(company.document);
+  const licenseKey = generateLicenseCode(cleanCnpj, validUntil);
+  const now = new Date().toISOString();
+  const id = crypto.randomUUID();
+
+  db.prepare(`
+    INSERT INTO system_licenses (
+      id, company_id, cnpj, license_key, valid_until, is_active, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+  `).run(id, company.id, cleanCnpj, licenseKey, validUntil, now, now);
+
+  return db.prepare('SELECT * FROM system_licenses WHERE id = ?').get(id) as DbSystemLicense;
+}
+
+/**
+ * EN: Renews a company's license by adding `daysToAdd` days.
+ *     - If no license exists yet, creates a new one starting from today.
+ *     - If the current license is already expired (`daysRemaining < 0`), adds `daysToAdd` starting from today.
+ *     - If the current license is still valid (`daysRemaining >= 0`), extends from its current future `valid_until`.
+ *     Ready both for 1-click Master renewals and future payment Webhooks (Pix/Boleto/Asaas/Mercado Pago).
+ * PT: Renova a licença de uso de uma empresa somando `daysToAdd` dias:
+ *     - Se ainda não existir licença, cria uma nova a partir da data atual.
+ *     - Se a licença atual estiver vencida (`daysRemaining < 0`), soma `daysToAdd` a partir de hoje.
+ *     - Se a licença atual ainda estiver vigente (`daysRemaining >= 0`), soma sobre a data futura `valid_until`.
+ *     Pronta tanto para o clique rápido do Usuário Master quanto para futuros Webhooks de pagamento (Pix/Boleto).
+ */
+export function renewCompanyLicense(companyId: string, daysToAdd: number): DbSystemLicense {
+  const company = db
+    .prepare('SELECT id, document FROM companies WHERE id = ?')
+    .get(companyId) as { id: string; document: string } | undefined;
+
+  if (!company) {
+    throw new Error('Empresa não encontrada para renovação de licença.');
+  }
+
+  const safeDays = Math.max(1, Math.trunc(Number(daysToAdd) || 30));
+  const today = getSystemDateISO();
+  const cleanCnpj = normalizeLicenseCnpj(company.document);
+  const now = new Date().toISOString();
+
+  const current = db
+    .prepare('SELECT * FROM system_licenses WHERE company_id = ? ORDER BY updated_at DESC LIMIT 1')
+    .get(companyId) as DbSystemLicense | undefined;
+
+  if (!current) {
+    const validUntil = addDaysToISODate(today, safeDays);
+    const licenseKey = generateLicenseCode(cleanCnpj, validUntil);
+    const id = crypto.randomUUID();
+    db.prepare(`
+      INSERT INTO system_licenses (
+        id, company_id, cnpj, license_key, valid_until, is_active, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+    `).run(id, companyId, cleanCnpj, licenseKey, validUntil, now, now);
+    return db.prepare('SELECT * FROM system_licenses WHERE id = ?').get(id) as DbSystemLicense;
+  }
+
+  const currentRemaining = calculateDaysRemaining(current.valid_until, today);
+  const baseDate = currentRemaining >= 0 ? current.valid_until : today;
+  const nextValidUntil = addDaysToISODate(baseDate, safeDays);
+  const nextLicenseKey = generateLicenseCode(cleanCnpj, nextValidUntil);
+
+  db.prepare(`
+    UPDATE system_licenses
+    SET cnpj = ?, license_key = ?, valid_until = ?, is_active = 1, updated_at = ?
+    WHERE id = ?
+  `).run(cleanCnpj, nextLicenseKey, nextValidUntil, now, current.id);
+
+  return db.prepare('SELECT * FROM system_licenses WHERE id = ?').get(current.id) as DbSystemLicense;
+}
+
+/**
+ * EN: Automatically seeds an active FULL license for every registered company that does not yet
+ *     have an entry in `system_licenses`, and ensures the Master demo company uses the fictional
+ *     RFB alphanumeric CNPJ (`FC.202.6BR/0001-64`) with a 10-year FULL license for testing.
+ * PT: Semeia automaticamente uma licença ativa para cada empresa sem registro em `system_licenses`,
+ *     e garante que a empresa padrão de teste possua o CNPJ fictício alfanumérico (`FC.202.6BR/0001-64`)
+ *     com Licença FULL (10 anos / 3.650 dias) pronta para testes imediatos.
+ */
+export function seedDefaultLicenses(): void {
+  // EN: Upgrade any blank-CNPJ default placeholder or legacy company to the fictional alphanumeric CNPJ + FULL license.
+  // PT: Atualiza eventual empresa padrão sem CNPJ (ou com placeholder antigo) para o CNPJ fictício alfanumérico + Licença FULL.
+  const blankDefaultCompanies = db.prepare(`
+    SELECT id FROM companies
+    WHERE document = '' OR legal_name = 'Minha Empresa Principal Ltda'
+  `).all() as { id: string }[];
+
+  const now = new Date().toISOString();
+  for (const comp of blankDefaultCompanies) {
+    db.prepare(`
+      UPDATE companies
+      SET legal_name = ?, trade_name = ?, document = ?, updated_at = ?
+      WHERE id = ?
+    `).run(
+      'FluxoClaro Tecnologia Financeira Ltda',
+      'FluxoClaro Matriz (Demo Full)',
+      DEMO_ALPHANUMERIC_CNPJ,
+      now,
+      comp.id
+    );
+    db.prepare('DELETE FROM system_licenses WHERE company_id = ?').run(comp.id);
+    ensureLicenseForCompany(comp.id, FULL_LICENSE_DAYS);
+  }
+
+  const companiesWithoutLicense = db.prepare(`
+    SELECT c.id
+    FROM companies c
+    WHERE NOT EXISTS (
+      SELECT 1 FROM system_licenses sl WHERE sl.company_id = c.id
+    )
+  `).all() as { id: string }[];
+
+  for (const comp of companiesWithoutLicense) {
+    ensureLicenseForCompany(comp.id, FULL_LICENSE_DAYS);
+  }
 }
 
 export function seedDefaultCategoriesForUser(userId: string): Record<string, string> {
@@ -367,6 +548,9 @@ try {
   for (const u of existingUsers) {
     seedDefaultCompanyForUser(u.id);
   }
+  // EN: Seed 365-day licenses for all companies without license on server startup.
+  // PT: Semeia licenças de 365 dias para todas as empresas sem licença ao iniciar o servidor.
+  seedDefaultLicenses();
 } catch {
   // Safe fallback
 }

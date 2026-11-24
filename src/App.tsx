@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AlertTriangle,
   BarChart3,
   ChevronLeft,
   ChevronRight,
+  Key,
   KeyRound,
   LayoutDashboard,
   ListChecks,
@@ -34,6 +36,7 @@ import { OfflineSyncBanner, PWAInstallButton } from './components/PWAInstallButt
 import { ReportsView } from './components/ReportsView';
 import { SettingsView } from './components/SettingsView';
 import { SettleModal } from './components/SettleModal';
+import { SystemReleaseModal } from './components/SystemReleaseModal';
 import { TransactionDetailModal } from './components/TransactionDetailModal';
 import { TransactionModal } from './components/TransactionModal';
 import { TransactionsView } from './components/TransactionsView';
@@ -45,6 +48,7 @@ import type {
   Category,
   Company,
   Contact,
+  LicenseStatusResponse,
   LocalBackupPayload,
   SyncMutation,
   Transaction,
@@ -56,6 +60,7 @@ import {
   currentMonthKey,
   daysUntilDue,
   formatBRL,
+  formatDateBR,
   formatMonthLabel,
   nextRecurrenceDate,
   shiftMonthKey,
@@ -149,6 +154,10 @@ export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   // Controls visibility of the Update Center & System Diagnostics slide-over / Estado de abertura da Central de Atualizações
   const [updateCenterOpen, setUpdateCenterOpen] = useState(false);
+
+  // System Licensing & Release Modal state (Phase 10.2) / Estado de Licenciamento e Modal de Liberação do Sistema
+  const [licenseStatus, setLicenseStatus] = useState<LicenseStatusResponse | null>(null);
+  const [systemReleaseOpen, setSystemReleaseOpen] = useState(false);
 
   // Toast message
   const [toast, setToast] = useState<string | null>(null);
@@ -330,6 +339,25 @@ export default function App() {
     [persistCache, showToast]
   );
 
+  // Refresh active company license status from backend (`GET /api/license/status`)
+  // Atualiza o status da licença da empresa ativa junto ao backend e abre o modal se estiver expirada
+  const refreshLicenseStatus = useCallback(
+    async (companyIdOverride?: string | 'all') => {
+      if (!user || !navigator.onLine) return;
+      try {
+        const targetId = companyIdOverride ?? selectedCompanyId;
+        const status = await api.getLicenseStatus(targetId === 'all' ? undefined : targetId);
+        setLicenseStatus(status);
+        if (status.isExpired || status.daysRemaining < 0) {
+          setSystemReleaseOpen(true);
+        }
+      } catch {
+        // Ignore transient offline errors when checking license status
+      }
+    },
+    [user, selectedCompanyId]
+  );
+
   // Initial load once per authenticated user ID: instant IndexedDB hydration + initial sync
   const userId = user?.id || null;
   useEffect(() => {
@@ -377,6 +405,26 @@ export default function App() {
       syncWithServer(userId, false);
     }
   }, [isOnline, userId, syncWithServer]);
+
+  // Check license status whenever user logs in or switches the active company in the header
+  // Verifica o status da licença sempre que o usuário autenticar ou trocar de empresa no seletor global
+  useEffect(() => {
+    if (!userId || !isOnline) return;
+    refreshLicenseStatus(selectedCompanyId);
+  }, [userId, isOnline, selectedCompanyId, refreshLicenseStatus]);
+
+  // Helper that blocks frontend write mutations when the active company's license is expired
+  // Helper que bloqueia mutações financeiras no frontend quando a licença está vencida, abrindo a tela de liberação
+  const ensureLicenseAllowsWrite = useCallback((): boolean => {
+    if (licenseStatus && (licenseStatus.isExpired || licenseStatus.daysRemaining < 0)) {
+      setSystemReleaseOpen(true);
+      showToast(
+        'Licença de uso expirada. Insira o código em Liberação do Sistema para continuar lançando.'
+      );
+      return false;
+    }
+    return true;
+  }, [licenseStatus, showToast]);
 
   // Due-date alerts shared between Bell Popover, Browser Notifications, and Dashboard
   const dueAlerts = useMemo(() => {
@@ -427,7 +475,17 @@ export default function App() {
         try {
           await onlineAction();
           return;
-        } catch {
+        } catch (err) {
+          // EN: If the server returns HTTP 403 (expired license or anti-fraud lock), surface the error instead of queuing offline!
+          // PT: Se o servidor retornar HTTP 403 (licença expirada ou trava anti-fraude), exibe o alerta e não coloca na fila offline!
+          if (err instanceof ApiError && err.status === 403) {
+            showToast(err.message);
+            if (err.message.toLowerCase().includes('licença')) {
+              refreshLicenseStatus();
+              setSystemReleaseOpen(true);
+            }
+            return;
+          }
           // Fallback to offline queue if request failed transiently
         }
       }
@@ -446,7 +504,7 @@ export default function App() {
 
   // CRUD Handlers (Offline-first optimistic update + IndexedDB cache + queue/sync)
   const handleSaveTransactionBatch = async (items: Transaction[]) => {
-    if (!user) return;
+    if (!user || !ensureLicenseAllowsWrite()) return;
     const next = [...transactions, ...items].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
     setTransactions(next);
     await persistCache(user.id, categories, contacts, next);
@@ -459,7 +517,7 @@ export default function App() {
   };
 
   const handleUpdateSingleTransaction = async (item: Transaction) => {
-    if (!user) return;
+    if (!user || !ensureLicenseAllowsWrite()) return;
     const next = transactions
       .map((t) => (t.id === item.id ? item : t))
       .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
@@ -470,6 +528,7 @@ export default function App() {
   };
 
   const handleToggleSettle = async (tx: Transaction) => {
+    if (!ensureLicenseAllowsWrite()) return;
     if (tx.status === 'pending') {
       setSettlingTx(tx);
       return;
@@ -559,7 +618,7 @@ export default function App() {
   };
 
   const handleDuplicateTransaction = async (tx: Transaction) => {
-    if (!user) return;
+    if (!user || !ensureLicenseAllowsWrite()) return;
     const dup = buildDuplicatedTransaction(tx);
     const next = [...transactions, dup].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
     setTransactions(next);
@@ -569,7 +628,7 @@ export default function App() {
   };
 
   const handleBatchSettle = async (txs: Transaction[], paymentMethod: string, paidAt: string) => {
-    if (!user) return;
+    if (!user || !ensureLicenseAllowsWrite()) return;
     const pendingList = txs.filter((t) => t.status === 'pending');
     if (pendingList.length === 0) return;
     const now = new Date().toISOString();
@@ -596,7 +655,7 @@ export default function App() {
   };
 
   const handleBatchDelete = async (ids: string[]) => {
-    if (!user || ids.length === 0) return;
+    if (!user || ids.length === 0 || !ensureLicenseAllowsWrite()) return;
     const idSet = new Set(ids);
     const next = transactions.filter((t) => !idSet.has(t.id));
     setTransactions(next);
@@ -606,7 +665,7 @@ export default function App() {
   };
 
   const handleApplyRenegotiation = async (toDeleteIds: string[], toUpsert: Transaction[]) => {
-    if (!user) return;
+    if (!user || !ensureLicenseAllowsWrite()) return;
     const deleteSet = new Set(toDeleteIds);
     const upsertMap = new Map(toUpsert.map((t) => [t.id, t]));
     const remaining = transactions.filter((t) => !deleteSet.has(t.id));
@@ -635,7 +694,7 @@ export default function App() {
   };
 
   const handleDeleteSingleTransaction = async (tx: Transaction) => {
-    if (!user) return;
+    if (!user || !ensureLicenseAllowsWrite()) return;
     const next = transactions.filter((t) => t.id !== tx.id);
     setTransactions(next);
     await persistCache(user.id, categories, contacts, next);
@@ -644,7 +703,7 @@ export default function App() {
   };
 
   const handleDeleteTransactionGroup = async (groupId: string) => {
-    if (!user) return;
+    if (!user || !ensureLicenseAllowsWrite()) return;
     const next = transactions.filter((t) => t.installmentGroupId !== groupId);
     setTransactions(next);
     await persistCache(user.id, categories, contacts, next);
@@ -856,6 +915,16 @@ export default function App() {
             <>
               <button
                 type="button"
+                onClick={() => setSystemReleaseOpen(true)}
+                title="Liberação do Sistema"
+                aria-label="Liberação do Sistema"
+                data-testid="sidebar-open-system-release"
+                className="w-10 h-10 flex items-center justify-center rounded-xl text-teal-700 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-950/50 cursor-pointer"
+              >
+                <Key className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
                 onClick={() => setChangePassOpen(true)}
                 title={`Alterar minha senha (${user.displayName})`}
                 aria-label="Alterar minha senha"
@@ -898,6 +967,16 @@ export default function App() {
                   <KeyRound className="w-4 h-4" />
                 </button>
               </div>
+              {/* Desktop Sidebar Shortcut to System Release / Atalho no menu lateral para Liberação do Sistema */}
+              <button
+                type="button"
+                onClick={() => setSystemReleaseOpen(true)}
+                data-testid="sidebar-open-system-release"
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-teal-200 dark:border-teal-800/80 bg-teal-50/50 dark:bg-teal-950/30 text-xs font-semibold text-teal-800 dark:text-teal-300 hover:bg-teal-100/70 dark:hover:bg-teal-900/40 min-h-[38px] cursor-pointer"
+              >
+                <Key className="w-3.5 h-3.5" />
+                Liberação do Sistema
+              </button>
               <button
                 type="button"
                 onClick={handleLogout}
@@ -1031,6 +1110,58 @@ export default function App() {
           onSyncNow={() => syncWithServer(user.id, true)}
         />
 
+        {/* Preventive Expiration Warning Banner (daysRemaining <= 5 and >= 0) & Expired Read-Only Strip (Phase 10.2) */}
+        {/* Banner Preventivo de Vencimento de Licença (quando faltam 5 dias ou menos) e Aviso de Expiração */}
+        {licenseStatus &&
+          licenseStatus.daysRemaining >= 0 &&
+          licenseStatus.daysRemaining <= 5 && (
+            <div
+              role="status"
+              data-testid="license-expiring-banner"
+              className="bg-amber-50 dark:bg-amber-950/50 border-b border-amber-200 dark:border-amber-800/80 px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs text-amber-900 dark:text-amber-200"
+            >
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" aria-hidden="true" />
+                <span>
+                  ⚠️ <em>Atenção: A licença de uso desta empresa expira em{' '}
+                  <strong className="font-mono-tabular">{licenseStatus.daysRemaining}</strong> dia(s) (
+                  <strong className="font-mono-tabular">{formatDateBR(licenseStatus.validUntil)}</strong>).</em>
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSystemReleaseOpen(true)}
+                data-testid="banner-open-release-btn"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold cursor-pointer shrink-0 transition-colors"
+              >
+                <span>🔑 Liberar Sistema</span>
+              </button>
+            </div>
+          )}
+
+        {licenseStatus && (licenseStatus.isExpired || licenseStatus.daysRemaining < 0) && (
+          <div
+            role="alert"
+            data-testid="license-expired-banner"
+            className="bg-red-50 dark:bg-red-950/60 border-b border-red-200 dark:border-red-900 px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs text-red-900 dark:text-red-200"
+          >
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0" aria-hidden="true" />
+              <span>
+                <strong>Licença de uso expirada</strong> ({formatDateBR(licenseStatus.validUntil)}). Consultas e relatórios seguem liberados; insira o código para voltar a lançar.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSystemReleaseOpen(true)}
+              data-testid="expired-banner-open-release-btn"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold cursor-pointer shrink-0 transition-colors"
+            >
+              <span>🔑 Liberar Sistema</span>
+            </button>
+          </div>
+        )}
+
         {/* Mobile Month Strip */}
         {(activeView === 'dashboard' ||
           activeView === 'transactions' ||
@@ -1093,6 +1224,7 @@ export default function App() {
                   onQuickSettle={handleToggleSettle}
                   onOpenConsult={(tx) => setConsultingTx(tx)}
                   onOpenNewTransaction={() => {
+                    if (!ensureLicenseAllowsWrite()) return;
                     setEditingTx(null);
                     setTxModalOpen(true);
                   }}
@@ -1114,16 +1246,24 @@ export default function App() {
                   companies={companies}
                   selectedCompanyId={selectedCompanyId}
                   onOpenNew={() => {
+                    if (!ensureLicenseAllowsWrite()) return;
                     setEditingTx(null);
                     setTxModalOpen(true);
                   }}
                   onOpenConsult={(tx) => setConsultingTx(tx)}
                   onOpenEdit={(tx) => {
+                    if (!ensureLicenseAllowsWrite()) return;
                     setEditingTx(tx);
                     setTxModalOpen(true);
                   }}
-                  onOpenXmlImport={() => setXmlModalOpen(true)}
-                  onOpenExcelImport={() => setExcelModalOpen(true)}
+                  onOpenXmlImport={() => {
+                    if (!ensureLicenseAllowsWrite()) return;
+                    setXmlModalOpen(true);
+                  }}
+                  onOpenExcelImport={() => {
+                    if (!ensureLicenseAllowsWrite()) return;
+                    setExcelModalOpen(true);
+                  }}
                   onToggleSettle={handleToggleSettle}
                   onDuplicate={handleDuplicateTransaction}
                   onBatchSettle={handleBatchSettle}
@@ -1188,11 +1328,16 @@ export default function App() {
                   onOpenChangePassword={() => setChangePassOpen(true)}
                   onCompaniesChange={setCompanies}
                   onOpenUpdateCenter={() => setUpdateCenterOpen(true)}
+                  onOpenSystemRelease={() => setSystemReleaseOpen(true)}
                 />
               )}
 
               {activeView === 'admin' && isMasterOrAdmin && (
-                <AdminView currentUser={user} onNotify={showToast} />
+                <AdminView
+                  currentUser={user}
+                  onNotify={showToast}
+                  onLicenseChanged={() => refreshLicenseStatus()}
+                />
               )}
             </>
           )}
@@ -1283,6 +1428,19 @@ export default function App() {
                 <div className="font-mono-tabular text-slate-500">@{user.username}</div>
               </div>
               <PWAInstallButton />
+              {/* Mobile shortcut to open System Release / Atalho no menu lateral mobile para Liberação do Sistema */}
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  setSystemReleaseOpen(true);
+                }}
+                data-testid="mobile-open-system-release"
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-xl border border-teal-200 dark:border-teal-800/80 bg-teal-50/50 dark:bg-teal-950/30 text-teal-800 dark:text-teal-300 text-xs font-semibold min-h-[42px]"
+              >
+                <Key className="w-4 h-4 text-teal-700 dark:text-teal-400" />
+                Liberação do Sistema
+              </button>
               {/* Mobile shortcut to open Update Center / Atalho no menu lateral mobile para a Central de Atualizações */}
               <button
                 type="button"
@@ -1419,6 +1577,33 @@ export default function App() {
         isOpen={updateCenterOpen}
         onClose={() => setUpdateCenterOpen(false)}
         isOnline={isOnline}
+      />
+
+      {/* System Release / License Activation Modal (Phase 10.2) / Modal de Liberação do Sistema */}
+      <SystemReleaseModal
+        isOpen={systemReleaseOpen}
+        onClose={() => setSystemReleaseOpen(false)}
+        licenseStatus={licenseStatus}
+        companies={companies}
+        selectedCompanyId={selectedCompanyId}
+        onActivated={(validUntil, daysRemaining) => {
+          setLicenseStatus((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  isValid: true,
+                  isExpired: false,
+                  validUntil,
+                  daysRemaining,
+                }
+              : null
+          );
+          showToast(`Sistema liberado com sucesso até ${formatDateBR(validUntil)}!`);
+          refreshLicenseStatus();
+          window.setTimeout(() => {
+            setSystemReleaseOpen(false);
+          }, 800);
+        }}
       />
 
       {/* Toast Notification */}

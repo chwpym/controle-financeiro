@@ -531,8 +531,9 @@ describe('Recurring and duplicate transactions', () => {
 });
 
 describe('cleanDocumentDigits & findDuplicateContactDocument', () => {
-  it('cleans non-numeric characters from document strings', () => {
-    expect(cleanDocumentDigits('09.812.913/0001-87')).toBe('09812913000187');
+  it('cleans punctuation from numeric and alphanumeric document strings', () => {
+    expect(cleanDocumentDigits('12.ABC.345/01DE-35')).toBe('12ABC34501DE35');
+    expect(cleanDocumentDigits('FC.202.6BR/0001-64')).toBe('FC2026BR000164');
     expect(cleanDocumentDigits('123.456.789-00')).toBe('12345678900');
     expect(cleanDocumentDigits('   ')).toBe('');
     expect(cleanDocumentDigits(null)).toBe('');
@@ -541,8 +542,8 @@ describe('cleanDocumentDigits & findDuplicateContactDocument', () => {
   const sampleContacts = [
     {
       id: 'c1',
-      name: 'GENUINA COMERCIAL LINENSE DE PECAS',
-      document: '09.812.913/0001-87',
+      name: 'ALFA DISTRIBUIDORA FICTICIA LTDA',
+      document: '12.ABC.345/01DE-35',
     },
     {
       id: 'c2',
@@ -552,14 +553,14 @@ describe('cleanDocumentDigits & findDuplicateContactDocument', () => {
   ];
 
   it('detects duplicate CNPJ with identical formatting', () => {
-    const dup = findDuplicateContactDocument(sampleContacts, '09.812.913/0001-87');
+    const dup = findDuplicateContactDocument(sampleContacts, '12.ABC.345/01DE-35');
     expect(dup).not.toBeNull();
     expect(dup?.id).toBe('c1');
-    expect(dup?.name).toBe('GENUINA COMERCIAL LINENSE DE PECAS');
+    expect(dup?.name).toBe('ALFA DISTRIBUIDORA FICTICIA LTDA');
   });
 
-  it('detects duplicate CNPJ with raw unmasked numbers', () => {
-    const dup = findDuplicateContactDocument(sampleContacts, '09812913000187');
+  it('detects duplicate CNPJ with raw unmasked characters', () => {
+    const dup = findDuplicateContactDocument(sampleContacts, '12abc34501de35');
     expect(dup).not.toBeNull();
     expect(dup?.id).toBe('c1');
   });
@@ -571,7 +572,7 @@ describe('cleanDocumentDigits & findDuplicateContactDocument', () => {
   });
 
   it('ignores duplicate check when editing the same contact (currentContactId matches)', () => {
-    const dup = findDuplicateContactDocument(sampleContacts, '09.812.913/0001-87', 'c1');
+    const dup = findDuplicateContactDocument(sampleContacts, '12.ABC.345/01DE-35', 'c1');
     expect(dup).toBeNull();
   });
 

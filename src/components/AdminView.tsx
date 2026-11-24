@@ -22,18 +22,29 @@ import {
   ShieldAlert,
   ShieldCheck,
   Trash2,
+  Users,
   X,
 } from 'lucide-react';
 import type { AdminSummary, AdminUserRow, Company, UserProfile, UserRole } from '../types';
 import { api, ApiError } from '../utils/api';
 import { formatBRL, formatDateBR } from '../utils/format';
+import { AdminLicensesTab } from './admin/AdminLicensesTab';
 
 interface AdminViewProps {
   currentUser: UserProfile;
   onNotify: (text: string) => void;
+  /** Optional callback triggered when Master renews a company license / Callback opcional após renovar licença */
+  onLicenseChanged?: () => void;
 }
 
-export const AdminView: React.FC<AdminViewProps> = ({ currentUser, onNotify }) => {
+export const AdminView: React.FC<AdminViewProps> = ({
+  currentUser,
+  onNotify,
+  onLicenseChanged,
+}) => {
+  // EN: Active section tab inside the Administrative Panel ('users' or 'licenses' for Master/Admin).
+  // PT: Aba ativa dentro do Painel Administrativo ('users' para Usuários ou 'licenses' para Licenças & Assinaturas).
+  const [adminTab, setAdminTab] = useState<'users' | 'licenses'>('users');
   const [users, setUsers] = useState<AdminUserRow[]>([]);
   const [summary, setSummary] = useState<AdminSummary | null>(null);
   const [availableCompanies, setAvailableCompanies] = useState<Company[]>([]);
@@ -330,6 +341,47 @@ export const AdminView: React.FC<AdminViewProps> = ({ currentUser, onNotify }) =
 
   return (
     <div className="space-y-6">
+      {/* Navigation Tabs: Users vs Licenses & Subscriptions (Phase 10.2) */}
+      {/* Abas de Navegação do Painel Master: Usuários & Permissões vs Licenças & Assinaturas */}
+      <div
+        className="flex flex-wrap items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3"
+        data-testid="admin-tabs"
+      >
+        <button
+          type="button"
+          onClick={() => setAdminTab('users')}
+          data-testid="admin-tab-users"
+          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+            adminTab === 'users'
+              ? 'bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 border border-teal-200/80 dark:border-teal-800/80 shadow-2xs'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
+          }`}
+        >
+          <Users className="w-4 h-4" aria-hidden="true" />
+          <span>Usuários &amp; Permissões</span>
+        </button>
+
+        {(currentUser.role === 'master' || currentUser.role === 'admin') && (
+          <button
+            type="button"
+            onClick={() => setAdminTab('licenses')}
+            data-testid="admin-tab-licenses"
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              adminTab === 'licenses'
+                ? 'bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 border border-teal-200/80 dark:border-teal-800/80 shadow-2xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
+            }`}
+          >
+            <KeyRound className="w-4 h-4" aria-hidden="true" />
+            <span>Licenças &amp; Assinaturas</span>
+          </button>
+        )}
+      </div>
+
+      {adminTab === 'licenses' ? (
+        <AdminLicensesTab onNotify={onNotify} onLicenseChanged={onLicenseChanged} />
+      ) : (
+        <>
       {/* Admin Summary KPIs */}
       {summary && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -564,6 +616,8 @@ export const AdminView: React.FC<AdminViewProps> = ({ currentUser, onNotify }) =
           </table>
         </div>
       </div>
+        </>
+      )}
 
       {/* ========================================================================= */}
       {/* Create User Modal / Modal de Criação de Usuário */}

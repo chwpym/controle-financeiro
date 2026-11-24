@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import express from 'express';
 import type { Response } from 'express';
-import { db, seedDefaultCompanyForUser } from '../db';
+import { db, ensureLicenseForCompany, seedDefaultCompanyForUser } from '../db';
 import { requireAuth, type AuthedRequest } from '../middleware/auth';
 import type { Company } from '../../src/types';
 
@@ -9,29 +9,39 @@ const router = express.Router();
 
 router.use(requireAuth);
 
+/**
+ * EN: Official mathematical validation of the 14-char CNPJ supporting both traditional numeric
+ *     and the RFB Alphanumeric standard (IN RFB nº 2.229/2024: positions 1..12 accept 0-9 & A-Z
+ *     using ASCII code - 48; positions 13..14 are numeric check digits).
+ * PT: Validação matemática oficial de 14 caracteres do CNPJ com suporte ao modelo numérico tradicional
+ *     e ao novo padrão Alfanumérico da Receita Federal (IN RFB nº 2.229/2024: posições 1 a 12 aceitam
+ *     0-9 e A-Z usando ASCII - 48; posições 13 e 14 são dígitos verificadores numéricos).
+ */
 function isValidCNPJ(value: string | null | undefined): boolean {
   if (!value) return false;
-  const digits = value.replace(/\D/g, '');
-  if (digits.length !== 14) return false;
-  if (/^(\d)\1{13}$/.test(digits)) return false;
+  const clean = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (clean.length !== 14) return false;
+  if (/^([A-Z0-9])\1{13}$/.test(clean)) return false;
+  if (!/^\d{2}$/.test(clean.slice(12))) return false;
 
   const weights1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
   let sum1 = 0;
   for (let i = 0; i < 12; i++) {
-    sum1 += Number(digits[i]) * weights1[i];
+    sum1 += (clean.charCodeAt(i) - 48) * weights1[i];
   }
   const rem1 = sum1 % 11;
   const d1 = rem1 < 2 ? 0 : 11 - rem1;
-  if (d1 !== Number(digits[12])) return false;
+  if (d1 !== Number(clean[12])) return false;
 
   const weights2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
   let sum2 = 0;
-  for (let i = 0; i < 13; i++) {
-    sum2 += Number(digits[i]) * weights2[i];
+  for (let i = 0; i < 12; i++) {
+    sum2 += (clean.charCodeAt(i) - 48) * weights2[i];
   }
+  sum2 += (clean.charCodeAt(12) - 48) * weights2[12];
   const rem2 = sum2 % 11;
   const d2 = rem2 < 2 ? 0 : 11 - rem2;
-  return d2 === Number(digits[13]);
+  return d2 === Number(clean[13]);
 }
 
 function mapCompany(row: any): Company {
@@ -140,7 +150,7 @@ router.post('/', (req: AuthedRequest, res: Response): void => {
   }
 
   const document = String(body.document || '').trim();
-  const cleanDoc = document.replace(/\D/g, '');
+  const cleanDoc = document.toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (!cleanDoc || !isValidCNPJ(cleanDoc)) {
     res.status(400).json({ error: 'CNPJ inválido ou obrigatório.' });
     return;
@@ -190,6 +200,10 @@ router.post('/', (req: AuthedRequest, res: Response): void => {
     now
   );
 
+  // EN: Provision initial 365-day license for newly created company.
+  // PT: Provisiona licença inicial de 365 dias para a nova empresa cadastrada.
+  ensureLicenseForCompany(id, 365);
+
   const created = db.prepare('SELECT * FROM companies WHERE id = ? AND user_id = ?').get(id, uid);
   res.status(201).json({ company: mapCompany(created) });
 });
@@ -215,7 +229,7 @@ router.put('/:id', (req: AuthedRequest, res: Response): void => {
   let document = existing.document;
   if (body.document !== undefined) {
     const rawDoc = String(body.document).trim();
-    const cleanDoc = rawDoc.replace(/\D/g, '');
+    const cleanDoc = rawDoc.toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (cleanDoc && !isValidCNPJ(cleanDoc)) {
       res.status(400).json({ error: 'CNPJ inválido.' });
       return;

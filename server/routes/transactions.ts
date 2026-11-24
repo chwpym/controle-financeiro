@@ -3,6 +3,7 @@ import express from 'express';
 import type { Response } from 'express';
 import { db } from '../db';
 import { requireAuth, requireDeletePermission, type AuthedRequest } from '../middleware/auth';
+import { requireActiveLicense } from './license';
 
 const router = express.Router();
 
@@ -36,7 +37,12 @@ router.get('/', (req: AuthedRequest, res: Response): void => {
   res.json({ transactions });
 });
 
-router.post('/batch', (req: AuthedRequest, res: Response): void => {
+/**
+ * POST /api/transactions/batch
+ * EN: Creates or updates transactions in batch. Protected by requireActiveLicense.
+ * PT: Cria ou atualiza lançamentos financeiros em lote. Protegido por requireActiveLicense (bloqueio por licença expirada).
+ */
+router.post('/batch', requireActiveLicense, (req: AuthedRequest, res: Response): void => {
   const uid = req.authUser!.id;
   const items = Array.isArray(req.body?.items) ? req.body.items : [];
   if (items.length === 0) {
@@ -121,7 +127,12 @@ router.post('/batch', (req: AuthedRequest, res: Response): void => {
   res.json({ ok: true, count: items.length });
 });
 
-router.put('/:id', (req: AuthedRequest, res: Response): void => {
+/**
+ * PUT /api/transactions/:id
+ * EN: Updates a single transaction. Protected by requireActiveLicense.
+ * PT: Atualiza um lançamento financeiro individual. Protegido por requireActiveLicense (bloqueio por licença expirada).
+ */
+router.put('/:id', requireActiveLicense, (req: AuthedRequest, res: Response): void => {
   const uid = req.authUser!.id;
   const id = req.params.id;
   const item = req.body;
@@ -197,10 +208,10 @@ router.put('/:id', (req: AuthedRequest, res: Response): void => {
 
 /**
  * POST /api/transactions/batch-delete
- * EN: Batch deletes transactions. Protected by requireDeletePermission (anti-fraud).
- * PT: Exclui lançamentos em lote. Protegido por requireDeletePermission (trava anti-fraude).
+ * EN: Batch deletes transactions. Protected by requireActiveLicense and requireDeletePermission (anti-fraud).
+ * PT: Exclui lançamentos em lote. Protegido por requireActiveLicense (licença ativa) e requireDeletePermission (trava anti-fraude).
  */
-router.post('/batch-delete', requireDeletePermission, (req: AuthedRequest, res: Response): void => {
+router.post('/batch-delete', requireActiveLicense, requireDeletePermission, (req: AuthedRequest, res: Response): void => {
   const uid = req.authUser!.id;
   const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : [];
   if (ids.length === 0) {
@@ -219,20 +230,20 @@ router.post('/batch-delete', requireDeletePermission, (req: AuthedRequest, res: 
 
 /**
  * DELETE /api/transactions/:id
- * EN: Deletes a single transaction. Protected by requireDeletePermission.
- * PT: Exclui um lançamento único. Protegido por requireDeletePermission.
+ * EN: Deletes a single transaction. Protected by requireActiveLicense and requireDeletePermission.
+ * PT: Exclui um lançamento único. Protegido por requireActiveLicense e requireDeletePermission.
  */
-router.delete('/:id', requireDeletePermission, (req: AuthedRequest, res: Response): void => {
+router.delete('/:id', requireActiveLicense, requireDeletePermission, (req: AuthedRequest, res: Response): void => {
   db.prepare('DELETE FROM transactions WHERE id = ? AND user_id = ?').run(req.params.id, req.authUser!.id);
   res.json({ ok: true });
 });
 
 /**
  * DELETE /api/transactions/group/:groupId
- * EN: Deletes an installment group. Protected by requireDeletePermission.
- * PT: Exclui um grupo de parcelas inteiro. Protegido por requireDeletePermission.
+ * EN: Deletes an installment group. Protected by requireActiveLicense and requireDeletePermission.
+ * PT: Exclui um grupo de parcelas inteiro. Protegido por requireActiveLicense e requireDeletePermission.
  */
-router.delete('/group/:groupId', requireDeletePermission, (req: AuthedRequest, res: Response): void => {
+router.delete('/group/:groupId', requireActiveLicense, requireDeletePermission, (req: AuthedRequest, res: Response): void => {
   db.prepare('DELETE FROM transactions WHERE installment_group_id = ? AND user_id = ?').run(
     req.params.groupId,
     req.authUser!.id

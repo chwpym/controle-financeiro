@@ -354,9 +354,15 @@ export function buildDuplicatedTransaction(tx: Transaction, nextDueDate?: string
   };
 }
 
+/**
+ * EN: Normalizes CPF/CNPJ documents removing punctuation while preserving uppercase alphanumeric
+ *     characters for RFB Alphanumeric CNPJs (IN RFB nº 2.229/2024).
+ * PT: Normaliza documentos CPF/CNPJ removendo pontuação e mantendo caracteres alfanuméricos
+ *     maiúsculos para suporte ao CNPJ Alfanumérico da Receita Federal.
+ */
 export function cleanDocumentDigits(doc: string | null | undefined): string {
   if (!doc) return '';
-  return doc.replace(/\D/g, '');
+  return doc.toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
 export function findDuplicateContactDocument<T extends { id: string; name: string; document?: string }>(

@@ -169,3 +169,56 @@ export type AppView =
   | 'reports'
   | 'settings'
   | 'admin';
+
+/**
+ * EN: Response returned by `GET /api/license/status` and `POST /api/admin/licenses/renew` (Phase 10.2).
+ * PT: Estrutura de resposta do status de licença (`GET /api/license/status` e `POST /api/admin/licenses/renew`).
+ */
+export interface LicenseStatusResponse {
+  companyId?: string;
+  companyName: string;
+  legalName?: string;
+  cnpj: string;
+  isValid: boolean;
+  isExpired: boolean;
+  daysRemaining: number;
+  validUntil: string;
+  systemDate: string;
+}
+
+/**
+ * EN: Response returned by `POST /api/license/activate`.
+ * PT: Estrutura de resposta da ativação de código de liberação (`POST /api/license/activate`).
+ */
+export interface LicenseActivationResponse {
+  ok: boolean;
+  message: string;
+  validUntil: string;
+  daysRemaining: number;
+}
+
+/**
+ * EN: Row representing a company's subscription/license in the Master/Admin panel (`GET /api/admin/licenses`).
+ * PT: Linha de licença/assinatura de empresa exibida no Painel Master (`GET /api/admin/licenses`).
+ */
+export interface AdminLicenseRow {
+  companyId: string;
+  legalName: string;
+  tradeName: string;
+  cnpj: string;
+  validUntil: string;
+  daysRemaining: number;
+  isValid: boolean;
+  isExpired: boolean;
+  licenseStatus: 'active' | 'expiring_soon' | 'expired';
+  updatedAt: string;
+}
+
+/**
+ * EN: Response returned by `GET /api/admin/licenses`.
+ * PT: Resposta da listagem administrativa de licenças (`GET /api/admin/licenses`).
+ */
+export interface AdminLicensesResponse {
+  licenses: AdminLicenseRow[];
+  systemDate: string;
+}

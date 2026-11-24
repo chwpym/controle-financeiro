@@ -25,6 +25,17 @@
   .tabular-nums {
     font-variant-numeric: tabular-nums;
   }
+
+  /* Prevent underlying page scroll when native modal <dialog> is open (Modern Web Guidance) */
+  dialog:modal {
+    overscroll-behavior: contain;
+  }
+  dialog::backdrop {
+    overflow: hidden;
+    overscroll-behavior: contain;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

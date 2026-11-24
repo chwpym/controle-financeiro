@@ -46,6 +46,8 @@ interface SettingsViewProps {
   onCompaniesChange?: (companies: Company[]) => void;
   /** Opens the Update Center & System Diagnostics slide-over / Abre a Central de Atualizações e Diagnóstico */
   onOpenUpdateCenter?: () => void;
+  /** Opens the System Release / License Activation modal / Abre a tela de Liberação do Sistema */
+  onOpenSystemRelease?: () => void;
 }
 
 const COLOR_PRESETS = [
@@ -86,6 +88,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onOpenChangePassword,
   onCompaniesChange,
   onOpenUpdateCenter,
+  onOpenSystemRelease,
 }) => {
   // Create form
   const [catName, setCatName] = useState('');
@@ -850,6 +853,29 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 >
                   <Rocket className="w-3.5 h-3.5 text-teal-700 dark:text-teal-400" />
                   <span>Central de Atualizações</span>
+                </button>
+              </div>
+            )}
+
+            {/* Shortcut to open System Release / License Activation (Phase 10.2) / Atalho para Liberação do Sistema */}
+            {onOpenSystemRelease && (
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-medium text-slate-900 dark:text-white">
+                    Licença de Uso &amp; Assinatura
+                  </div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                    Inserir chave criptográfica de renovação ou consultar validade do CNPJ
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={onOpenSystemRelease}
+                  data-testid="settings-open-system-release"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 min-h-[40px] shrink-0 cursor-pointer"
+                >
+                  <KeyRound className="w-3.5 h-3.5 text-teal-700 dark:text-teal-400" aria-hidden="true" />
+                  <span>Liberação do Sistema</span>
                 </button>
               </div>
             )}

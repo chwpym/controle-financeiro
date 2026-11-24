@@ -22,7 +22,7 @@ Transformar o **FluxoClaro** em um sistema financeiro modular, de fácil manuten
 [✅ Fase 7: XML Avançado]     -> Importação de NF-e (Compra/Venda), NFS-e e Modularização
 [✅ Fase 8: Excel Modular]    -> Importação Excel com Drag-and-Drop nativo e Decomposição (< 200 linhas)
 [✅ Fase 9: Multi-Empresas]   -> Concluída com Sucesso (9.1, 9.2 e 9.3: Entidades, RBAC, CNPJ Alfanumérico, Trava Anti-Fraude e Modais)
-[⏳ Fase 10: Central & Licença]-> 10.1 Central de Atualizações, Deploy Badge no Footer e Auto-Update; 10.2 Liberação do Sistema
+[✅ Fase 10: Central & Licença]-> Concluída com Sucesso (10.1 Central de Atualizações e Auto-Update; 10.2 Sistema de Licenciamento e Liberação)
 [📋 Fase 11: Telas Restantes] -> Modularização de Contatos, Configurações, Relatórios e Renegociação
 [📋 Fase 12: Auditoria UI]    -> Pente fino de padronização em 100% dos botões, inputs, pills e drawers
 ```
@@ -239,7 +239,7 @@ Permitir a gestão de múltiplos CNPJs (Matriz, Filiais ou diferentes negócios)
 
 ---
 
-## 📋 FASE 10: Central de Atualizações, Deploy Badge & Licenciamento por Tempo de Uso
+## ✅ FASE 10: Concluída com Sucesso (Central de Atualizações, Deploy Badge & Licenciamento por Tempo de Uso)
 
 Implementar governança de versões, eliminação de problemas de cache do PWA no navegador e proteção/gestão de licença comercial (SaaS / On-Premise):
 
@@ -256,21 +256,22 @@ Implementar governança de versões, eliminação de problemas de cache do PWA n
   - Gaveta lateral moderna com 3 cards: Status Atual do Sistema, Verificação de Atualizações com console visual de diagnóstico e O Que Há de Novo (Changelog).
 - **Validação:** 112 testes passando no Vitest (100% verde em 14 suítes), 0 erros de TypeScript (`npm run lint`).
 
-### 📋 Etapa 10.2: Sistema de Licenciamento, Trava por Tempo de Uso e Liberação do Sistema
+### ✅ Etapa 10.2: Concluída com Sucesso (Sistema de Licenciamento, Trava por Tempo de Uso e Liberação do Sistema)
 - **Motor de Licença & SQLite (`server/db.ts` & `server/licenseEngine.ts`):**
-  - Tabela `system_license` associando `company_id`, `cnpj`, `license_key`, `valid_until` e `is_active`.
-  - Função interna desacoplada `renewCompanyLicense(companyId, days)` para renovações em lote, acionada com 1 clique pelo Master e pronta para integração futura com Webhooks de pagamento (Pix/Boleto/Cartão via Asaas/Mercado Pago).
-  - Seed automático de licença inicial de 365 dias para empresas existentes garantindo continuidade operacional nos testes.
+  - Tabela `system_licenses` associando `company_id`, `cnpj`, `license_key`, `valid_until` e `is_active` com índices dedicados.
+  - Função interna desacoplada `renewCompanyLicense(companyId, days)` para renovações em lote, acionada com 1 clique pelo Master e pronta para integração futura com Webhooks de pagamento (Pix/Boleto/Cartão).
+  - Seed automático (`seedDefaultLicenses`) de licença inicial de 365 dias para empresas existentes garantindo continuidade operacional nos testes.
 - **Algoritmo Criptográfico do Código de Liberação (HMAC-SHA256):**
-  - Geração e validação matemática de chaves formatadas em blocos `[ XXXX - XXXX - XXXX - XXXX ]` vinculadas ao CNPJ da empresa e data de expiração.
-  - Script utilitário no servidor para emissão ágil de códigos de emergência pelo suporte.
-- **Comportamento do Sistema e Alertas:**
-  - Alerta preventivo no topo (`App.tsx`) com contagem regressiva quando a licença estiver a 5 dias ou menos do vencimento.
-  - Ao expirar: bloqueio total de operações de escrita financeira (`POST`, `PUT`, `DELETE`), preservando consultas e relatórios históricos e exibindo a tela de liberação.
-- **Modal / Tela de Liberação do Sistema (`SystemReleaseModal.tsx`):**
-  - Componente fiel à referência com Data do Sistema, CNPJ ativo, campo formatado `Código de Liberação: [ - - - - - - ]` e botões `[ Confirmar ]` e `[ Abandonar ]`.
-- **Gestão de Licenças no Painel Master (`AdminView.tsx`):**
-  - Seção ou aba exclusiva para o Usuário Master visualizar o vencimento de cada empresa/cliente e renovar com 1 clique (`[ +30 Dias ]`) ou gerar código de emergência.
+  - Geração e validação matemática de chaves formatadas em blocos `XXXX-XXXX-XXXX-XXXX` vinculadas ao CNPJ (numérico ou alfanumérico RFB) e data de expiração.
+  - Utilitário CLI em `server/licenseEngine.ts` para emissão ágil de códigos de emergência pelo suporte.
+- **Rotas REST & Trava de Expiração (`server/routes/license.ts` & `server/routes/transactions.ts`):**
+  - Endpoints `/api/license/status`, `/api/license/activate`, `/api/admin/licenses`, `/api/admin/licenses/renew` e `/api/admin/licenses/generate-code`.
+  - Middleware `requireActiveLicense` bloqueando gravações financeiras (`POST`, `PUT`, `DELETE`) quando vencida, preservando 100% das consultas e relatórios históricos (`GET`).
+- **Modal / Tela de Liberação do Sistema (`SystemReleaseModal.tsx`) & Alertas (`App.tsx`):**
+  - Alerta preventivo âmbar no topo quando restam 5 dias ou menos, e abertura automática em modo bloqueio quando expirado.
+  - Modal nativo `<dialog>` acessível com Data do Sistema, CNPJ ativo (com seletor multi-empresa), campo formatado em maiúsculas, erros inline e botões `[ Abandonar ]` e `[ Confirmar ]`.
+- **Gestão de Licenças no Painel Master (`AdminView.tsx` & `AdminLicensesTab.tsx`):**
+  - Aba **"Licenças & Assinaturas"** para o Master visualizar vencimentos e renovar com 1 clique (`[ +30 Dias ]`) ou gerar/copiar código de emergência (`[ 🔑 Gerar Código ]`).
 
 ---
 

@@ -1,10 +1,13 @@
 import type {
+  AdminLicensesResponse,
   AdminSummary,
   AdminUserRow,
   Category,
   Company,
   CompanyStatus,
   Contact,
+  LicenseActivationResponse,
+  LicenseStatusResponse,
   LocalBackupPayload,
   Transaction,
   UserProfile,
@@ -246,5 +249,64 @@ export const api = {
     return request<{ ok: boolean }>(`/api/admin/users/${id}`, {
       method: 'DELETE',
     });
+  },
+
+  // System Licensing & Release Management (Phase 10.2)
+  // Gestão de Licenciamento, Ativação por Código e Renovação no Painel Master (Fase 10.2)
+  /**
+   * EN: Queries the license status of the user's active (or selected) company.
+   * PT: Consulta o status da licença de uso da empresa ativa (ou selecionada) do usuário.
+   */
+  getLicenseStatus(companyId?: string | null): Promise<LicenseStatusResponse> {
+    const query =
+      companyId && companyId !== 'all' ? `?companyId=${encodeURIComponent(companyId)}` : '';
+    return request<LicenseStatusResponse>(`/api/license/status${query}`);
+  },
+  /**
+   * EN: Validates and activates a signed system release key for the given CNPJ.
+   * PT: Valida e ativa um código criptográfico de liberação para o CNPJ informado.
+   */
+  activateLicense(
+    cnpj: string,
+    licenseKey: string,
+    companyId?: string | null
+  ): Promise<LicenseActivationResponse> {
+    return request<LicenseActivationResponse>('/api/license/activate', {
+      method: 'POST',
+      body: JSON.stringify({ cnpj, licenseKey, companyId }),
+    });
+  },
+  /**
+   * EN: Lists all companies and their license status for Master/Admin management.
+   * PT: Lista todas as empresas e seus respectivos status de licença para gestão Master/Admin.
+   */
+  getAdminLicenses(): Promise<AdminLicensesResponse> {
+    return request<AdminLicensesResponse>('/api/admin/licenses');
+  },
+  /**
+   * EN: Renews a company's license immediately by adding `days` (e.g. +30 days) with 1 click.
+   * PT: Renova imediatamente a licença de uma empresa somando `days` (ex: +30 dias) com 1 clique.
+   */
+  renewAdminLicense(companyId: string, days: number): Promise<LicenseStatusResponse> {
+    return request<LicenseStatusResponse>('/api/admin/licenses/renew', {
+      method: 'POST',
+      body: JSON.stringify({ companyId, days }),
+    });
+  },
+  /**
+   * EN: Generates a signed emergency release code for a company valid for `days` days.
+   * PT: Gera um código assinado de liberação de emergência para envio manual ao cliente.
+   */
+  generateLicenseCode(
+    companyId: string,
+    days: number
+  ): Promise<{ licenseKey: string; validUntil: string; cnpj?: string; companyName?: string }> {
+    return request<{ licenseKey: string; validUntil: string; cnpj?: string; companyName?: string }>(
+      '/api/admin/licenses/generate-code',
+      {
+        method: 'POST',
+        body: JSON.stringify({ companyId, days }),
+      }
+    );
   },
 };
