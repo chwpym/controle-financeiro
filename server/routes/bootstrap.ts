@@ -41,20 +41,54 @@ function getSnapshotData(uid: string) {
     recurrenceInterval: row.recurrenceInterval || null,
   }));
 
-  const rawCompanies = db.prepare(`
-    SELECT id, user_id as userId, legal_name as legalName, trade_name as tradeName,
-      document, state_registration as stateRegistration,
-      municipal_registration as municipalRegistration, status, email, phone,
-      whatsapp, cep, street, number, complement, neighborhood, city, state,
-      logo_data_url as logoDataUrl, color, is_default as isDefault,
-      created_at as createdAt, updated_at as updatedAt
-    FROM companies WHERE user_id = ? ORDER BY is_default DESC, trade_name ASC
-  `).all(uid) as Array<Record<string, unknown>>;
+  const user = db.prepare('SELECT role, default_company_id FROM users WHERE id = ?').get(uid) as
+    | { role: string; default_company_id?: string | null }
+    | undefined;
 
-  const companies = rawCompanies.map((c) => ({
-    ...c,
-    isDefault: Boolean(c.isDefault),
-  }));
+  let rawCompanies: Array<Record<string, unknown>> = [];
+  if (user && (user.role === 'master' || user.role === 'admin')) {
+    rawCompanies = db.prepare(`
+      SELECT id, user_id as userId, legal_name as legalName, trade_name as tradeName,
+        document, state_registration as stateRegistration,
+        municipal_registration as municipalRegistration, status, email, phone,
+        whatsapp, cep, street, number, complement, neighborhood, city, state,
+        logo_data_url as logoDataUrl, color, is_default as isDefault,
+        created_at as createdAt, updated_at as updatedAt
+      FROM companies ORDER BY is_default DESC, trade_name ASC
+    `).all() as Array<Record<string, unknown>>;
+  } else {
+    rawCompanies = db.prepare(`
+      SELECT id, user_id as userId, legal_name as legalName, trade_name as tradeName,
+        document, state_registration as stateRegistration,
+        municipal_registration as municipalRegistration, status, email, phone,
+        whatsapp, cep, street, number, complement, neighborhood, city, state,
+        logo_data_url as logoDataUrl, color, is_default as isDefault,
+        created_at as createdAt, updated_at as updatedAt
+      FROM companies
+      WHERE status = 'active'
+        AND (
+          id IN (SELECT company_id FROM user_company_access WHERE user_id = ?)
+          OR user_id = ?
+        )
+      ORDER BY is_default DESC, trade_name ASC
+    `).all(uid, uid) as Array<Record<string, unknown>>;
+  }
+
+  const defaultCompId = user?.default_company_id;
+  const companies = rawCompanies.map((c) => {
+    let isDef = Boolean(c.isDefault);
+    if (defaultCompId) {
+      if (c.id === defaultCompId) {
+        isDef = true;
+      } else if (user?.role === 'user') {
+        isDef = false;
+      }
+    }
+    return {
+      ...c,
+      isDefault: isDef,
+    };
+  });
 
   return {
     categories,

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Company, Contact, Transaction } from '../../../types';
 import { AlertsDrawer } from '../AlertsDrawer';
 
@@ -142,6 +142,16 @@ const mockAlerts: Transaction[] = [
 ];
 
 describe('AlertsDrawer', () => {
+  beforeEach(() => {
+    // Freeze "today" so due-date buckets are deterministic regardless of the real date
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(`${mockToday}T12:00:00`));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('renders drawer with alert list, filter counts and allows closing', () => {
     const onClose = vi.fn();
     const onQuickSettle = vi.fn();

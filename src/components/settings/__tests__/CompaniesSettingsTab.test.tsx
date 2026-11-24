@@ -1,7 +1,7 @@
 /// <reference types="@testing-library/jest-dom/vitest" />
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { CompaniesSettingsTab } from '../CompaniesSettingsTab';
 import type { Company } from '../../../types';
 import { api } from '../../../utils/api';
@@ -15,6 +15,7 @@ vi.mock('../../../utils/api', () => ({
     setCompanyDefault: vi.fn(),
     deleteCompany: vi.fn(),
     lookupCep: vi.fn(),
+    lookupCnpj: vi.fn(),
   },
 }));
 
@@ -195,5 +196,104 @@ describe('CompaniesSettingsTab', () => {
     expect(screen.getByText('Editar Empresa')).toBeInTheDocument();
     const legalNameInput = screen.getByDisplayValue('Alpha Comércio e Representações Ltda');
     expect(legalNameInput).toBeInTheDocument();
+  });
+
+  it('5. Consultar CNPJ button calls api.lookupCnpj and auto-fills fields with feedback banner', async () => {
+    const mockCnpjData = {
+      cnpj: '00.000.000/0001-91',
+      name: 'Alpha Matriz Consultada Ltda',
+      tradeName: 'Alpha Matriz',
+      email: 'contato@alphamatriz.com.br',
+      phone: '(11) 4002-8922',
+      cep: '01310-200',
+      street: 'Avenida Paulista',
+      number: '2000',
+      complement: '15º andar',
+      neighborhood: 'Bela Vista',
+      city: 'São Paulo',
+      state: 'SP',
+      situacao: 'ATIVA',
+    };
+
+    vi.mocked(api.lookupCnpj).mockResolvedValueOnce(mockCnpjData);
+
+    render(<CompaniesSettingsTab initialCompanies={mockCompanies} />);
+
+    // Open create drawer
+    fireEvent.click(screen.getByRole('button', { name: /Nova Empresa/i }));
+
+    const cnpjInput = screen.getByPlaceholderText('00.000.000/0000-00');
+    fireEvent.change(cnpjInput, { target: { value: '00000000000191' } });
+
+    // Find and click Consultar button
+    const consultBtn = screen.getByTestId('company-lookup-cnpj-btn');
+    expect(consultBtn).toBeInTheDocument();
+    expect(consultBtn).toHaveTextContent('Consultar');
+
+    fireEvent.click(consultBtn);
+
+    // Verify API called with clean digits
+    expect(api.lookupCnpj).toHaveBeenCalledWith('00000000000191');
+
+    // Wait for auto-fill and feedback banner
+    const feedback = await screen.findByText(/Dados preenchidos via consulta CNPJ\. Você pode editar qualquer campo\./i);
+    expect(feedback).toBeInTheDocument();
+
+    // Check filled fields
+    expect(screen.getByDisplayValue('Alpha Matriz Consultada Ltda')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Alpha Matriz')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('contato@alphamatriz.com.br')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('(11) 4002-8922')).toBeInTheDocument();
+  });
+
+  it('6. Custom color selector allows picking preset or typing custom hex', () => {
+    render(<CompaniesSettingsTab initialCompanies={mockCompanies} />);
+
+    // Open create drawer
+    fireEvent.click(screen.getByRole('button', { name: /Nova Empresa/i }));
+
+    const hexInput = screen.getByTestId('company-color-hex-input');
+    expect(hexInput).toBeInTheDocument();
+    expect(hexInput).toHaveValue('#0F766E');
+
+    // Change hex code
+    fireEvent.change(hexInput, { target: { value: '#7C3AED' } });
+    expect(hexInput).toHaveValue('#7C3AED');
+
+    // Click on preset color
+    const presetBtn = screen.getByLabelText('Selecionar cor #DC2626');
+    fireEvent.click(presetBtn);
+    expect(hexInput).toHaveValue('#DC2626');
+  });
+
+  it('7. Calls onCompaniesChange callback on status toggle', async () => {
+    const onCompaniesChange = vi.fn();
+    const updatedStatusComp: Company = {
+      ...mockCompanies[1],
+      status: 'active',
+    };
+    vi.mocked(api.updateCompanyStatus).mockResolvedValueOnce({
+      company: updatedStatusComp,
+    });
+
+    render(
+      <CompaniesSettingsTab
+        initialCompanies={mockCompanies}
+        onCompaniesChange={onCompaniesChange}
+      />
+    );
+
+    // Toggle status on Beta Tech (inactive -> active)
+    const activateBtn = screen.getByRole('button', { name: /^Ativar$/i });
+    fireEvent.click(activateBtn);
+
+    expect(api.updateCompanyStatus).toHaveBeenCalledWith('comp-2', 'active');
+
+    // onCompaniesChange should have been called with updated array
+    await waitFor(() => {
+      expect(onCompaniesChange).toHaveBeenCalled();
+    });
+    const latestCallArg = onCompaniesChange.mock.calls[onCompaniesChange.mock.calls.length - 1][0];
+    expect(latestCallArg).toEqual([mockCompanies[0], updatedStatusComp]);
   });
 });

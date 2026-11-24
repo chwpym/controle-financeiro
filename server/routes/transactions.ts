@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import express from 'express';
 import type { Response } from 'express';
 import { db } from '../db';
-import { requireAuth, type AuthedRequest } from '../middleware/auth';
+import { requireAuth, requireDeletePermission, type AuthedRequest } from '../middleware/auth';
 
 const router = express.Router();
 
@@ -195,7 +195,12 @@ router.put('/:id', (req: AuthedRequest, res: Response): void => {
   res.json({ ok: true });
 });
 
-router.post('/batch-delete', (req: AuthedRequest, res: Response): void => {
+/**
+ * POST /api/transactions/batch-delete
+ * EN: Batch deletes transactions. Protected by requireDeletePermission (anti-fraud).
+ * PT: Exclui lançamentos em lote. Protegido por requireDeletePermission (trava anti-fraude).
+ */
+router.post('/batch-delete', requireDeletePermission, (req: AuthedRequest, res: Response): void => {
   const uid = req.authUser!.id;
   const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : [];
   if (ids.length === 0) {
@@ -212,12 +217,22 @@ router.post('/batch-delete', (req: AuthedRequest, res: Response): void => {
   res.json({ ok: true, count: ids.length });
 });
 
-router.delete('/:id', (req: AuthedRequest, res: Response): void => {
+/**
+ * DELETE /api/transactions/:id
+ * EN: Deletes a single transaction. Protected by requireDeletePermission.
+ * PT: Exclui um lançamento único. Protegido por requireDeletePermission.
+ */
+router.delete('/:id', requireDeletePermission, (req: AuthedRequest, res: Response): void => {
   db.prepare('DELETE FROM transactions WHERE id = ? AND user_id = ?').run(req.params.id, req.authUser!.id);
   res.json({ ok: true });
 });
 
-router.delete('/group/:groupId', (req: AuthedRequest, res: Response): void => {
+/**
+ * DELETE /api/transactions/group/:groupId
+ * EN: Deletes an installment group. Protected by requireDeletePermission.
+ * PT: Exclui um grupo de parcelas inteiro. Protegido por requireDeletePermission.
+ */
+router.delete('/group/:groupId', requireDeletePermission, (req: AuthedRequest, res: Response): void => {
   db.prepare('DELETE FROM transactions WHERE installment_group_id = ? AND user_id = ?').run(
     req.params.groupId,
     req.authUser!.id

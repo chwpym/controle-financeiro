@@ -65,12 +65,47 @@ export interface DbUser {
   last_login_at: string | null;
   created_at: string;
   updated_at: string;
+  /**
+   * EN: Main company of the user (Phase 9.3). Optional because old rows may not have it.
+   * PT: Empresa principal do usuário (Fase 9.3). Opcional pois linhas antigas podem não ter.
+   */
+  default_company_id?: string | null;
+  /**
+   * EN: Delete permission flag — 1 = can delete transactions, 0 = blocked (anti-fraud lock).
+   * PT: Flag de exclusão — 1 = pode excluir lançamentos, 0 = bloqueado (trava anti-fraude).
+   */
+  can_delete?: number;
 }
 
 export interface AuthedRequest extends Request {
   authUser?: DbUser;
 }
 
+/**
+ * EN: Returns the IDs of the companies explicitly granted to a user (user_company_access).
+ * PT: Retorna os IDs das empresas liberadas explicitamente para o usuário (user_company_access).
+ */
+export function getUserCompanyIds(userId: string): string[] {
+  try {
+    const rows = db
+      .prepare('SELECT company_id FROM user_company_access WHERE user_id = ? ORDER BY created_at ASC')
+      .all(userId) as { company_id: string }[];
+    return rows.map((r) => r.company_id);
+  } catch {
+    // EN: Table may not exist in very old databases. / PT: Tabela pode não existir em bancos antigos.
+    return [];
+  }
+}
+
+/**
+ * EN: Converts a raw SQLite `users` row into the public profile sent to the frontend
+ *     (never exposes password_hash). Includes the Phase 9.3 permission fields.
+ * PT: Converte a linha crua da tabela `users` no perfil público enviado ao frontend
+ *     (nunca expõe o password_hash). Inclui os campos de permissão da Fase 9.3:
+ *   - canDelete: se a coluna não existir (undefined) assume true; caso contrário 0 = false.
+ *   - defaultCompanyId: empresa principal ou null.
+ *   - companyIds: empresas liberadas ao usuário.
+ */
 export function mapUser(row: DbUser) {
   return {
     id: row.id,
@@ -80,6 +115,9 @@ export function mapUser(row: DbUser) {
     status: row.status,
     createdAt: row.created_at,
     lastLoginAt: row.last_login_at,
+    canDelete: row.can_delete === undefined ? true : row.can_delete !== 0,
+    defaultCompanyId: row.default_company_id || null,
+    companyIds: getUserCompanyIds(row.id),
   };
 }
 
@@ -119,6 +157,24 @@ export function requireMasterOrAdmin(req: AuthedRequest, res: Response, next: Ne
 export function requireMasterOnly(req: AuthedRequest, res: Response, next: NextFunction): void {
   if (!req.authUser || req.authUser.role !== 'master') {
     res.status(403).json({ error: 'Acesso exclusivo do Usuário Master.' });
+    return;
+  }
+  next();
+}
+
+/**
+ * EN: Anti-fraud lock (Phase 9.3). Blocks deletion endpoints for operational users ('user')
+ *     whose `can_delete` flag is 0. Masters and admins are never blocked.
+ * PT: Trava anti-fraude (Fase 9.3). Bloqueia os endpoints de exclusão para usuários
+ *     operacionais ('user') cuja flag `can_delete` seja 0. Master e Admin nunca são bloqueados.
+ *     Retorna HTTP 403 com mensagem amigável em português.
+ */
+export function requireDeletePermission(req: AuthedRequest, res: Response, next: NextFunction): void {
+  const user = req.authUser;
+  if (user && user.role === 'user' && user.can_delete === 0) {
+    res.status(403).json({
+      error: 'Você não tem permissão para excluir lançamentos financeiros. Solicite liberação ao administrador.',
+    });
     return;
   }
   next();

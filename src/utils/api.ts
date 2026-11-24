@@ -205,13 +205,32 @@ export const api = {
   getAdminUsers() {
     return request<{ users: AdminUserRow[]; summary: AdminSummary }>('/api/admin/users');
   },
-  createAdminUser(payload: { username: string; displayName: string; password: string; role: UserRole }) {
+  createAdminUser(payload: {
+    username: string;
+    displayName: string;
+    password: string;
+    role: UserRole;
+    companyIds?: string[];
+    defaultCompanyId?: string | null;
+    canDelete?: boolean;
+  }) {
     return request<{ user: UserProfile }>('/api/admin/users', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
   },
-  updateAdminUser(id: string, payload: Partial<{ username: string; displayName: string; role: UserRole; status: UserStatus }>) {
+  updateAdminUser(
+    id: string,
+    payload: Partial<{
+      username: string;
+      displayName: string;
+      role: UserRole;
+      status: UserStatus;
+      companyIds?: string[];
+      defaultCompanyId?: string | null;
+      canDelete?: boolean;
+    }>
+  ) {
     return request<{ user: UserProfile }>(`/api/admin/users/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(payload),

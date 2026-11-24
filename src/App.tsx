@@ -1181,6 +1181,7 @@ export default function App() {
                   onDeleteCategory={handleDeleteCategory}
                   onRestoreBackup={handleRestoreLocalBackup}
                   onOpenChangePassword={() => setChangePassOpen(true)}
+                  onCompaniesChange={setCompanies}
                 />
               )}
 

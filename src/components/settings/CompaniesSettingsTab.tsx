@@ -11,6 +11,7 @@ import {
   Loader2,
   Mail,
   MapPin,
+  Palette,
   Phone,
   Plus,
   Power,
@@ -23,16 +24,23 @@ import type { Company, CompanyStatus } from '../../types';
 import { api } from '../../utils/api';
 import { cleanDocumentDigits, isValidCNPJ, maskCEP, maskCNPJ } from '../../utils/format';
 
-export const COMPANY_TAG_COLORS = [
-  '#0F766E', // Teal
-  '#2563EB', // Blue
-  '#7C3AED', // Purple
-  '#EA580C', // Orange
-  '#16A34A', // Green
-  '#DC2626', // Red
-  '#0284C7', // Sky
-  '#475569', // Slate
+export const COLOR_PRESETS = [
+  '#0F766E',
+  '#0D9488',
+  '#16A34A',
+  '#65A30D',
+  '#2563EB',
+  '#0284C7',
+  '#4F46E5',
+  '#7C3AED',
+  '#DB2777',
+  '#DC2626',
+  '#EA580C',
+  '#D97706',
+  '#475569',
 ];
+
+export const COMPANY_TAG_COLORS = COLOR_PRESETS;
 
 interface CompanyFormData {
   id?: string;
@@ -82,11 +90,13 @@ const emptyForm: CompanyFormData = {
 interface CompaniesSettingsTabProps {
   onNotify?: (message: string, type?: 'success' | 'error' | 'info') => void;
   initialCompanies?: Company[];
+  onCompaniesChange?: (companies: Company[]) => void;
 }
 
 export const CompaniesSettingsTab: React.FC<CompaniesSettingsTabProps> = ({
   onNotify,
   initialCompanies,
+  onCompaniesChange,
 }) => {
   const [companies, setCompanies] = useState<Company[]>(initialCompanies || []);
   const [loading, setLoading] = useState(!initialCompanies);
@@ -96,6 +106,7 @@ export const CompaniesSettingsTab: React.FC<CompaniesSettingsTabProps> = ({
   const [saving, setSaving] = useState(false);
   const [formFeedback, setFormFeedback] = useState<{ kind: 'error' | 'success'; text: string } | null>(null);
   const [lookupCepLoading, setLookupCepLoading] = useState(false);
+  const [lookupCnpjLoading, setLookupCnpjLoading] = useState(false);
 
   // Delete modal state
   const [companyToDelete, setCompanyToDelete] = useState<Company | null>(null);
@@ -108,7 +119,9 @@ export const CompaniesSettingsTab: React.FC<CompaniesSettingsTabProps> = ({
     try {
       setLoading(true);
       const res = await api.getCompanies();
-      setCompanies(res.companies || []);
+      const loaded = res.companies || [];
+      setCompanies(loaded);
+      onCompaniesChange?.(loaded);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Falha ao carregar empresas.';
       onNotify?.(msg, 'error');
@@ -185,6 +198,46 @@ export const CompaniesSettingsTab: React.FC<CompaniesSettingsTabProps> = ({
       setFormFeedback({ kind: 'error', text: msg });
     } finally {
       setLookupCepLoading(false);
+    }
+  };
+
+  // CNPJ lookup
+  const handleConsultCnpj = async () => {
+    const clean = form.document.replace(/\D/g, '');
+    if (clean.length !== 14) {
+      setFormFeedback({
+        kind: 'error',
+        text: 'Informe um CNPJ válido com 14 dígitos para consultar.',
+      });
+      return;
+    }
+    setLookupCnpjLoading(true);
+    setFormFeedback(null);
+    try {
+      const data = await api.lookupCnpj(clean);
+      setForm((prev) => ({
+        ...prev,
+        legalName: data.name || prev.legalName,
+        tradeName: data.tradeName || prev.tradeName || data.name || '',
+        email: data.email || prev.email,
+        phone: data.phone || prev.phone,
+        cep: data.cep ? maskCEP(data.cep) : prev.cep,
+        street: data.street || prev.street,
+        number: data.number || prev.number,
+        complement: data.complement || prev.complement,
+        neighborhood: data.neighborhood || prev.neighborhood,
+        city: data.city || prev.city,
+        state: data.state || prev.state,
+      }));
+      setFormFeedback({
+        kind: 'success',
+        text: 'Dados preenchidos via consulta CNPJ. Você pode editar qualquer campo.',
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Não foi possível consultar o CNPJ agora. Preencha manualmente.';
+      setFormFeedback({ kind: 'error', text: msg });
+    } finally {
+      setLookupCnpjLoading(false);
     }
   };
 
@@ -283,13 +336,13 @@ export const CompaniesSettingsTab: React.FC<CompaniesSettingsTabProps> = ({
           color: form.color,
           isDefault: form.isDefault,
         });
-        setCompanies((prev) =>
-          prev.map((c) => {
-            if (c.id === form.id) return res.company;
-            if (res.company.isDefault) return { ...c, isDefault: false };
-            return c;
-          })
-        );
+        const updated = companies.map((c) => {
+          if (c.id === form.id) return res.company;
+          if (res.company.isDefault) return { ...c, isDefault: false };
+          return c;
+        });
+        setCompanies(updated);
+        onCompaniesChange?.(updated);
         onNotify?.(`Empresa "${res.company.tradeName || res.company.legalName}" atualizada com sucesso!`, 'success');
       } else {
         const res = await api.createCompany({
@@ -313,10 +366,10 @@ export const CompaniesSettingsTab: React.FC<CompaniesSettingsTabProps> = ({
           color: form.color,
           isDefault: form.isDefault,
         });
-        setCompanies((prev) => {
-          const list = res.company.isDefault ? prev.map((c) => ({ ...c, isDefault: false })) : [...prev];
-          return [...list, res.company];
-        });
+        const list = res.company.isDefault ? companies.map((c) => ({ ...c, isDefault: false })) : [...companies];
+        const updated = [...list, res.company];
+        setCompanies(updated);
+        onCompaniesChange?.(updated);
         onNotify?.(`Empresa "${res.company.tradeName || res.company.legalName}" cadastrada com sucesso!`, 'success');
       }
       setDrawerOpen(false);
@@ -337,7 +390,9 @@ export const CompaniesSettingsTab: React.FC<CompaniesSettingsTabProps> = ({
     const nextStatus: CompanyStatus = comp.status === 'active' ? 'inactive' : 'active';
     try {
       const res = await api.updateCompanyStatus(comp.id, nextStatus);
-      setCompanies((prev) => prev.map((c) => (c.id === comp.id ? res.company : c)));
+      const updated = companies.map((c) => (c.id === comp.id ? res.company : c));
+      setCompanies(updated);
+      onCompaniesChange?.(updated);
       onNotify?.(
         `Empresa ${nextStatus === 'active' ? 'ativada' : 'inativada'} com sucesso!`,
         'success'
@@ -353,12 +408,12 @@ export const CompaniesSettingsTab: React.FC<CompaniesSettingsTabProps> = ({
     if (comp.isDefault) return;
     try {
       const res = await api.setCompanyDefault(comp.id);
-      setCompanies((prev) =>
-        prev.map((c) => {
-          if (c.id === comp.id) return res.company;
-          return { ...c, isDefault: false };
-        })
-      );
+      const updated = companies.map((c) => {
+        if (c.id === comp.id) return res.company;
+        return { ...c, isDefault: false };
+      });
+      setCompanies(updated);
+      onCompaniesChange?.(updated);
       onNotify?.(`"${comp.tradeName || comp.legalName}" definida como empresa padrão!`, 'success');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Falha ao definir empresa padrão.';
@@ -802,25 +857,47 @@ export const CompaniesSettingsTab: React.FC<CompaniesSettingsTabProps> = ({
                     <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
                       Cor da Tag de Identificação Visual
                     </label>
-                    <div className="flex flex-wrap items-center gap-2.5">
-                      {COMPANY_TAG_COLORS.map((color) => (
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <span className="text-xs text-slate-500 dark:text-slate-400 inline-flex items-center gap-1">
+                        <Palette className="w-3.5 h-3.5" />
+                        Cor:
+                      </span>
+                      {COLOR_PRESETS.map((color) => (
                         <button
                           key={color}
                           type="button"
                           onClick={() => setForm((prev) => ({ ...prev, color }))}
-                          aria-label={`Cor ${color}`}
-                          className={`w-7 h-7 rounded-full border-2 transition-transform flex items-center justify-center ${
+                          aria-label={`Selecionar cor ${color}`}
+                          className={`w-6 h-6 rounded-full border-2 transition-transform cursor-pointer ${
                             form.color.toUpperCase() === color.toUpperCase()
                               ? 'border-slate-900 dark:border-white scale-110 shadow-xs'
                               : 'border-transparent hover:scale-105'
                           }`}
                           style={{ backgroundColor: color }}
-                        >
-                          {form.color.toUpperCase() === color.toUpperCase() && (
-                            <Check className="w-4 h-4 text-white stroke-[3]" />
-                          )}
-                        </button>
+                        />
                       ))}
+                      <label
+                        title="Escolher qualquer cor personalizada"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-[11px] font-mono-tabular cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800"
+                      >
+                        <input
+                          type="color"
+                          value={/^#[0-9A-Fa-f]{6}$/.test(form.color) ? form.color : '#0F766E'}
+                          onChange={(e) => setForm((prev) => ({ ...prev, color: e.target.value.toUpperCase() }))}
+                          className="w-5 h-5 rounded cursor-pointer border-0 p-0 bg-transparent"
+                          data-testid="company-color-picker"
+                        />
+                        <span>Personalizada</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={form.color}
+                        onChange={(e) => setForm((prev) => ({ ...prev, color: e.target.value }))}
+                        maxLength={7}
+                        aria-label="Código hexadecimal da cor da empresa"
+                        data-testid="company-color-hex-input"
+                        className="w-20 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-mono-tabular uppercase"
+                      />
                     </div>
                   </div>
 
@@ -869,20 +946,32 @@ export const CompaniesSettingsTab: React.FC<CompaniesSettingsTabProps> = ({
                           </span>
                         )}
                       </div>
-                      <input
-                        type="text"
-                        required
-                        value={form.document}
-                        onChange={(e) =>
-                          setForm((prev) => ({ ...prev, document: maskCNPJ(e.target.value) }))
-                        }
-                        placeholder="00.000.000/0000-00"
-                        className={`w-full px-3 py-2 rounded-xl border font-mono text-sm focus:outline-hidden focus:ring-2 min-h-[42px] ${
-                          showCnpjInvalidAlert
-                            ? 'border-red-300 dark:border-red-700 bg-red-50/30 dark:bg-red-950/20 text-red-700 dark:text-red-300 focus:ring-red-500'
-                            : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:ring-teal-500'
-                        }`}
-                      />
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          required
+                          value={form.document}
+                          onChange={(e) =>
+                            setForm((prev) => ({ ...prev, document: maskCNPJ(e.target.value) }))
+                          }
+                          placeholder="00.000.000/0000-00"
+                          className={`flex-1 px-3 py-2 rounded-xl border font-mono text-sm focus:outline-hidden focus:ring-2 min-h-[42px] ${
+                            showCnpjInvalidAlert
+                              ? 'border-red-300 dark:border-red-700 bg-red-50/30 dark:bg-red-950/20 text-red-700 dark:text-red-300 focus:ring-red-500'
+                              : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:ring-teal-500'
+                          }`}
+                        />
+                        <button
+                          type="button"
+                          onClick={handleConsultCnpj}
+                          disabled={lookupCnpjLoading}
+                          data-testid="company-lookup-cnpj-btn"
+                          className="px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-semibold hover:opacity-90 disabled:opacity-60 inline-flex items-center gap-1.5 whitespace-nowrap min-h-[42px] cursor-pointer"
+                        >
+                          {lookupCnpjLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                          Consultar
+                        </button>
+                      </div>
                       {showCnpjInvalidAlert && (
                         <p
                           data-testid="cnpj-invalid-warning"

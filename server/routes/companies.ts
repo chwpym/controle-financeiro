@@ -62,22 +62,70 @@ function mapCompany(row: any): Company {
   };
 }
 
-// GET / - List user companies, seed default if empty
+// GET / - List user companies (with RBAC isolation by user role)
+// EN: For 'master' or 'admin', returns all companies in the system.
+//     For 'user', returns ONLY ACTIVE companies linked via user_company_access (or created by them).
+//     If the user has a default_company_id, ensures that company is returned with isDefault: true.
+// PT: Para 'master' ou 'admin', retorna todas as empresas do sistema.
+//     Para 'user', retorna APENAS empresas ATIVAS vinculadas via user_company_access (ou criadas por ele).
+//     Se o usuário possuir default_company_id, garante que venha marcada com isDefault: true.
 router.get('/', (req: AuthedRequest, res: Response): void => {
-  const uid = req.authUser!.id;
+  const user = req.authUser!;
+  const uid = user.id;
 
-  let rows = db.prepare(`
-    SELECT * FROM companies WHERE user_id = ? ORDER BY is_default DESC, created_at ASC
-  `).all(uid) as any[];
-
-  if (rows.length === 0) {
-    seedDefaultCompanyForUser(uid);
+  let rows: any[] = [];
+  if (user.role === 'master' || user.role === 'admin') {
     rows = db.prepare(`
-      SELECT * FROM companies WHERE user_id = ? ORDER BY is_default DESC, created_at ASC
-    `).all(uid) as any[];
+      SELECT * FROM companies ORDER BY is_default DESC, trade_name ASC, created_at ASC
+    `).all() as any[];
+
+    if (rows.length === 0) {
+      seedDefaultCompanyForUser(uid);
+      rows = db.prepare(`
+        SELECT * FROM companies ORDER BY is_default DESC, trade_name ASC, created_at ASC
+      `).all() as any[];
+    }
+  } else {
+    // EN: Operational users only see active companies authorized for them or created by them.
+    // PT: Usuários operacionais só visualizam empresas ativas autorizadas ou criadas por eles.
+    rows = db.prepare(`
+      SELECT * FROM companies
+      WHERE status = 'active'
+        AND (
+          id IN (SELECT company_id FROM user_company_access WHERE user_id = ?)
+          OR user_id = ?
+        )
+      ORDER BY is_default DESC, trade_name ASC, created_at ASC
+    `).all(uid, uid) as any[];
+
+    if (rows.length === 0) {
+      seedDefaultCompanyForUser(uid);
+      rows = db.prepare(`
+        SELECT * FROM companies WHERE user_id = ? AND status = 'active'
+      `).all(uid) as any[];
+    }
   }
 
-  res.json({ companies: rows.map(mapCompany) });
+  const defaultCompId = user.default_company_id;
+  const mapped = rows.map((r) => {
+    const comp = mapCompany(r);
+    if (defaultCompId) {
+      if (comp.id === defaultCompId) {
+        return { ...comp, isDefault: true };
+      } else if (user.role === 'user') {
+        return { ...comp, isDefault: false };
+      }
+    }
+    return comp;
+  });
+
+  // EN: Ensure at least one company has isDefault: true for operational users if companies exist.
+  // PT: Garante que pelo menos uma empresa venha com isDefault: true para operadores se houver empresas.
+  if (user.role === 'user' && mapped.length > 0 && !mapped.some((c) => c.isDefault)) {
+    mapped[0].isDefault = true;
+  }
+
+  res.json({ companies: mapped });
 });
 
 // POST / - Create company

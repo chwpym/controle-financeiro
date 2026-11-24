@@ -9,11 +9,19 @@ export interface UserProfile {
   status: UserStatus;
   createdAt: string;
   lastLoginAt: string | null;
+  /** IDs das empresas liberadas para o usuário (Fase 9.3) */
+  companyIds?: string[];
+  /** Empresa padrão inicial do usuário (Fase 9.3) */
+  defaultCompanyId?: string | null;
+  /** Permissão de exclusão de lançamentos financeiros (Fase 9.3) */
+  canDelete?: boolean;
 }
 
 export interface AdminUserRow extends UserProfile {
   transactionCount: number;
   contactCount: number;
+  /** Nomes das empresas vinculadas para exibição rápida na tabela administrativa (Fase 9.3) */
+  companyNames?: string[];
 }
 
 export interface AdminSummary {

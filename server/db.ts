@@ -148,6 +148,56 @@ if (!txColumns.some((col) => col.name === 'company_id')) {
   db.exec('ALTER TABLE transactions ADD COLUMN company_id TEXT');
 }
 
+/**
+ * Phase 9.3 — Per-company user access (RBAC) table.
+ * Fase 9.3 — Tabela de vínculo Usuário ↔ Empresa (controle de acesso por CNPJ).
+ *
+ * EN: Each row grants a user (role 'user') access to one company. The composite primary key
+ *     prevents duplicate grants, and ON DELETE CASCADE removes links automatically when either
+ *     the user or the company is deleted.
+ * PT: Cada linha libera o acesso de um usuário operacional a uma empresa. A chave primária
+ *     composta (user_id, company_id) impede vínculos duplicados, e o ON DELETE CASCADE apaga
+ *     os vínculos automaticamente quando o usuário ou a empresa forem excluídos.
+ */
+db.exec(`
+  CREATE TABLE IF NOT EXISTS user_company_access (
+    user_id TEXT NOT NULL,
+    company_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, company_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_uca_user ON user_company_access(user_id);
+  CREATE INDEX IF NOT EXISTS idx_uca_company ON user_company_access(company_id);
+`);
+
+/**
+ * EN: Idempotent column migrations for the `users` table. Each ALTER runs inside its own
+ *     try/catch, so restarting the server on an already-migrated database never crashes.
+ * PT: Migrações idempotentes das colunas da tabela `users`. Cada ALTER roda em seu próprio
+ *     try/catch: reiniciar o servidor com o banco já migrado nunca derruba a aplicação.
+ *   - default_company_id: empresa principal (inicial) do usuário / user's main company.
+ *   - can_delete: 1 = pode excluir lançamentos, 0 = bloqueado (trava anti-fraude).
+ *     DEFAULT 1 mantém o comportamento atual para usuários que já existiam.
+ */
+const userColumns = db.prepare('PRAGMA table_info(users)').all() as { name: string }[];
+if (!userColumns.some((col) => col.name === 'default_company_id')) {
+  try {
+    db.exec('ALTER TABLE users ADD COLUMN default_company_id TEXT');
+  } catch {
+    // EN: Column already exists (race/duplicate run) — safe to ignore.
+    // PT: A coluna já existe (execução duplicada) — pode ser ignorado com segurança.
+  }
+}
+if (!userColumns.some((col) => col.name === 'can_delete')) {
+  try {
+    db.exec('ALTER TABLE users ADD COLUMN can_delete INTEGER NOT NULL DEFAULT 1');
+  } catch {
+    // EN: Column already exists — safe to ignore. / PT: Coluna já existe — ignorar.
+  }
+}
+
 export function seedDefaultCompanyForUser(userId: string): string {
   const existing = db.prepare('SELECT id FROM companies WHERE user_id = ? LIMIT 1').get(userId) as { id: string } | undefined;
   if (existing) return existing.id;
@@ -305,8 +355,15 @@ export function ensureMasterSeed(): void {
 ensureMasterSeed();
 
 // Ensure existing users have at least one company
+// EN: Users that were already linked to shared companies (user_company_access) do NOT receive
+//     an automatic "Minha Empresa Principal" — they work only on the companies granted to them.
+// PT: Usuários que já possuem empresas liberadas (user_company_access) NÃO recebem a empresa
+//     automática "Minha Empresa Principal" — eles operam apenas nos CNPJs autorizados.
 try {
-  const existingUsers = db.prepare('SELECT id FROM users').all() as { id: string }[];
+  const existingUsers = db.prepare(`
+    SELECT u.id FROM users u
+    WHERE NOT EXISTS (SELECT 1 FROM user_company_access a WHERE a.user_id = u.id)
+  `).all() as { id: string }[];
   for (const u of existingUsers) {
     seedDefaultCompanyForUser(u.id);
   }

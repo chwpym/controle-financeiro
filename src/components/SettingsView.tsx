@@ -18,7 +18,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import type { Category, CategoryType, Contact, LocalBackupPayload, Transaction, UserRole } from '../types';
+import type { Category, CategoryType, Company, Contact, LocalBackupPayload, Transaction, UserRole } from '../types';
 import { downloadLocalBackup, parseLocalBackupFile } from '../utils/exporters';
 import { PWAInstallButton } from './PWAInstallButton';
 import { CompaniesSettingsTab } from './settings/CompaniesSettingsTab';
@@ -42,6 +42,7 @@ interface SettingsViewProps {
   onDeleteCategory: (id: string) => void;
   onRestoreBackup: (payload: LocalBackupPayload) => Promise<void>;
   onOpenChangePassword: () => void;
+  onCompaniesChange?: (companies: Company[]) => void;
 }
 
 const COLOR_PRESETS = [
@@ -80,6 +81,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onDeleteCategory,
   onRestoreBackup,
   onOpenChangePassword,
+  onCompaniesChange,
 }) => {
   // Create form
   const [catName, setCatName] = useState('');
@@ -256,6 +258,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
       {settingsTab === 'companies' ? (
         <CompaniesSettingsTab
+          onCompaniesChange={onCompaniesChange}
           onNotify={(msg, type) => {
             if (type === 'error') {
               setBackupMessage({ kind: 'error', text: msg });

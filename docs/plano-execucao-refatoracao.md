@@ -21,7 +21,7 @@ Transformar o **FluxoClaro** em um sistema financeiro modular, de fácil manuten
 [✅ Fase 6: Backend Limpo]    -> Separação do server.ts em arquitetura em camadas modular
 [✅ Fase 7: XML Avançado]     -> Importação de NF-e (Compra/Venda), NFS-e e Modularização
 [✅ Fase 8: Excel Modular]    -> Importação Excel com Drag-and-Drop nativo e Decomposição (< 200 linhas)
-[⏳ Fase 9: Multi-Empresas]   -> 9.1 e 9.2 Concluídos (Empresas, Seletor, Logo, AlertsDrawer, CNPJ Alfanumérico)
+[✅ Fase 9: Multi-Empresas]   -> Concluída com Sucesso (9.1, 9.2 e 9.3: Entidades, RBAC, CNPJ Alfanumérico, Trava Anti-Fraude e Modais)
 [📋 Fase 10: Licenciamento]   -> Trava por tempo de uso, chave criptografada e tela de liberação
 [📋 Fase 11: Telas Restantes] -> Modularização de Contatos, Configurações, Relatórios e Renegociação
 [📋 Fase 12: Auditoria UI]    -> Pente fino de padronização em 100% dos botões, inputs, pills e drawers
@@ -192,7 +192,7 @@ Transformar o **FluxoClaro** em um sistema financeiro modular, de fácil manuten
 
 ---
 
-## 📋 FASE 9: Multi-Empresas ("Minhas Empresas"), Visão Consolidada, Logotipos, Permissões e Drawer de Avisos
+## ✅ FASE 9: Concluída com Sucesso (Multi-Empresas, Visão Consolidada, Logotipos, Permissões RBAC e Drawer de Avisos)
 
 Permitir a gestão de múltiplos CNPJs (Matriz, Filiais ou diferentes negócios) com visão financeira individual ou consolidada, logotipo próprio por empresa para recibos, controle de permissões por usuário (com clonagem) e Drawer lateral de avisos:
 
@@ -205,7 +205,7 @@ Permitir a gestão de múltiplos CNPJs (Matriz, Filiais ou diferentes negócios)
   - Integrado a `server.ts` e suporte a backup/restore em `server/routes/backup.ts`.
 - **Tela de Gestão de Empresas em Configurações (`CompaniesSettingsTab.tsx`):**
   - Listagem de empresas em cards com badges de status (Ativa/Inativa), cor da tag, badge "Empresa Padrão" e logo em miniatura.
-  - Drawer de cadastro e edição no padrão do `ContactDrawer.tsx`: abas "1. Geral & Contato" e "2. Endereço Completo", toggle Ativa/Inativa, upload de logo Base64 com preview e busca de CEP automática.
+  - Drawer de cadastro e edição no padrão do `ContactDrawer.tsx`: abas "1. Geral & Contato" e "2. Endereço Completo", toggle Ativa/Inativa, upload de logo Base64 com preview, seletor de cor hexadecimal e busca de CEP/CNPJ com preenchimento automático.
 - **Validação:** 94 testes passando no Vitest (100% verde), 0 erros no lint.
 
 ### ✅ Etapa 9.2: Concluída com Sucesso (Vínculo de Contas, Seletor Global, Recibos PDF, Drawer de Avisos e CNPJ Alfanumérico)
@@ -215,7 +215,7 @@ Permitir a gestão de múltiplos CNPJs (Matriz, Filiais ou diferentes negócios)
   - Coluna `company_id` e índice `idx_tx_company` em `transactions` no SQLite e rotas REST.
   - Seleção no modal de lançamento (`TransactionModal`) e tag colorida na tabela de contas (`TransactionTable`).
 - **Seletor Global no Header (`CompanySelector.tsx`):**
-  - Dropdown no topo alternando entre empresa individual e `🌐 Todas as Empresas (Visão Consolidada)`.
+  - Dropdown no topo alternando entre empresa individual e `🌐 Todas as Empresas (Visão Consolidada)` com atualização em tempo real (`onCompaniesChange`).
   - Dashboard recalcula KPIs e gráficos em tempo real de acordo com a empresa ativa.
 - **Recibos Dinâmicos com Logotipo:**
   - Cabeçalho oficial no `TransactionDetailModal` e no PDF gerado com logotipo, Razão Social, CNPJ, IE e endereço.
@@ -223,16 +223,19 @@ Permitir a gestão de múltiplos CNPJs (Matriz, Filiais ou diferentes negócios)
   - Drawer deslizante da direita ativado pelo atalho do popover de avisos, com filtros e baixas rápidas.
 - **Validação:** 101 testes passando no Vitest (100% verde em 12 arquivos), 0 erros no lint.
 
-### Etapa 9.3: Controle de Acesso, Permissões por Empresa (RBAC) e Ajuste dos Modais de Usuário
+### ✅ Etapa 9.3: Concluída com Sucesso (Controle de Acesso, Permissões por Empresa RBAC, Trava Anti-Fraude e Modais de Usuário)
 - **Correção Visual no Painel Admin (`AdminView.tsx`):**
-  - Exibir as mensagens de erro (ex: validação de usuário sem espaços, senhas curtas) diretamente dentro dos modais de Criar Usuário, Editar e Reset de Senha, em vez de ficarem ocultas atrás do modal escuro.
-- **Regras de Visualização:**
-  - Usuários `master` e `admin`: Acesso irrestrito a todas as empresas ativas e à visão consolidada.
-  - Usuários operacionais (`user`): Acesso restrito apenas aos CNPJs autorizados no cadastro.
+  - Exibição de alertas de validação (`modalError`) renderizados diretamente no corpo dos modais (Criação, Edição e Redefinição de Senha) acima dos botões de ação, sem ficarem ocultos atrás do backdrop escuro.
+- **Tabela de Vínculo `user_company_access` & RBAC:**
+  - Usuários `master` e `admin`: Acesso irrestrito a todas as empresas cadastradas e à visão consolidada.
+  - Usuários operacionais (`user`): Acesso restrito exclusivamente às empresas ativas marcadas no seu cadastro.
+- **Trava de Segurança Anti-Fraude (`can_delete`):**
+  - Coluna `can_delete` na tabela `users` (desmarcada por padrão para novos operadores).
+  - Bloqueio estrito de exclusão no backend (`requireDeletePermission` em `server/routes/transactions.ts` retornando HTTP 403 para operadores desautorizados).
+  - Badges visuais na listagem de usuários (`Pode Excluir` / `Sem Exclusão`).
 - **Clonagem Rápida de Usuário:**
-  - Botão `[ 📋 Copiar de Outro Usuário ]` no modal de cadastro para herdar empresas liberadas e regras de acesso com 1 clique.
-- **Trava de Segurança:**
-  - Checkbox de permissão `[✓] Pode excluir lançamentos`: desmarcado por padrão para operadores, impedindo que contas sejam apagadas sem autorização do gerente.
+  - Botão `[ 📋 Copiar de Outro Usuário ]` no modal de cadastro replicando em 1 clique as empresas atribuídas, empresa padrão e a flag de exclusão.
+- **Validação:** 108 testes passando no Vitest (100% verde em 13 arquivos), 0 erros de TypeScript (`npm run lint`).
 
 ---
 
