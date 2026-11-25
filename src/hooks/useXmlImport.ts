@@ -73,7 +73,13 @@ export interface ComputedInvoiceSummary {
   divergenceCents: number;
   adjustmentType: XmlAdjustmentType;
   resolvedReasonLabel: string;
-  requiresCompanyAttention: boolean;
+  /**
+   * EN: Strict Two-Agent Fiscal Lock: true when an NF-e/NFS-e matches neither Issuer nor Recipient
+   *     among the user's registered companies, blocking import until the company is registered.
+   * PT: Trava Rígida de Integridade Fiscal (Regra de Dois Agentes): verdadeira quando nem o Emitente
+   *     nem o Destinatário pertencem às empresas cadastradas, bloqueando a importação.
+   */
+  isBlockedByFiscalLock: boolean;
 }
 
 const normalizeText = (v: string) => v.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -351,10 +357,10 @@ export function useXmlImport({
 
       const resolvedReasonLabel = getReasonLabel(adjustmentType, entry.adjustmentReason);
 
-      const activeCompanies = companies.filter((c) => c.status === 'active');
-      const hasRegisteredCompanies = (activeCompanies.length || companies.length) > 0;
-      const requiresCompanyAttention = Boolean(
-        entry.detection?.matchedRole === 'none' && hasRegisteredCompanies && !entry.companyId
+      const isBlockedByFiscalLock = Boolean(
+        entry.analysis &&
+          entry.analysis.kind !== 'generic' &&
+          (!entry.detection || entry.detection.matchedRole === 'none' || !entry.companyId)
       );
 
       return {
@@ -367,10 +373,10 @@ export function useXmlImport({
         divergenceCents,
         adjustmentType,
         resolvedReasonLabel,
-        requiresCompanyAttention,
+        isBlockedByFiscalLock,
       };
     },
-    [existingTransactions, companies]
+    [existingTransactions]
   );
 
   const entrySummaries = useMemo(
@@ -576,6 +582,7 @@ export function useXmlImport({
   // Quick one-click auto contact creation / Criação automática com 1 clique
   const handleAutoCreateContact = useCallback(async () => {
     if (!activeContact || !activeEntry) return;
+    setGlobalError(null);
     setCreatingContact(true);
     try {
       const newContact = buildContactFromXmlParty(
@@ -618,6 +625,7 @@ export function useXmlImport({
   // Callback após gravar um contato no modal/gaveta completo sem fechar nem perder a nota importada
   const handleCustomContactSaved = useCallback(
     async (newContact: Contact) => {
+      setGlobalError(null);
       await onCreateContact(newContact);
       const createdDocClean = cleanDocumentDigits(newContact.document);
       setEntries((prev) =>
@@ -676,13 +684,15 @@ export function useXmlImport({
   // Confirm import of the currently inspected single XML / Confirmar importação da nota individual
   const handleConfirmImport = useCallback(() => {
     if (!activeSummary) return;
+    if (activeSummary.isBlockedByFiscalLock) {
+      setGlobalError(
+        'Trava de Segurança Fiscal: Nem o Emitente nem o Destinatário correspondem a uma empresa sua cadastrada.'
+      );
+      return;
+    }
     const validSelected = activeSummary.selectedItems.filter((it) => it.amountCents > 0);
     if (validSelected.length === 0) {
       setGlobalError('Selecione pelo menos 1 parcela com valor maior que zero para importar.');
-      return;
-    }
-    if (activeSummary.requiresCompanyAttention) {
-      setGlobalError('Por segurança fiscal, selecione a qual empresa pertence este lançamento antes de importar.');
       return;
     }
 
@@ -694,21 +704,15 @@ export function useXmlImport({
   // Confirm batch import of all selected valid XMLs / Confirmar importação em massa de todas as notas
   const handleConfirmBatchImport = useCallback(() => {
     const selectedSummaries = entrySummaries.filter(
-      (s) => !s.entry.error && s.entry.selectedForBatch && s.selectedItems.some((it) => it.amountCents > 0)
+      (s) =>
+        !s.entry.error &&
+        !s.isBlockedByFiscalLock &&
+        s.entry.selectedForBatch &&
+        s.selectedItems.some((it) => it.amountCents > 0)
     );
 
     if (selectedSummaries.length === 0) {
-      setGlobalError('Selecione pelo menos 1 nota fiscal válida para importar em lote.');
-      return;
-    }
-
-    const missingCompany = selectedSummaries.find((s) => s.requiresCompanyAttention);
-    if (missingCompany) {
-      setActiveEntryId(missingCompany.entry.id);
-      setViewMode('single');
-      setGlobalError(
-        `A nota "${missingCompany.entry.fileName}" não possui CNPJ vinculado. Escolha a empresa antes de concluir.`
-      );
+      setGlobalError('Nenhuma nota fiscal válida vinculada a uma empresa sua para importar.');
       return;
     }
 
@@ -725,8 +729,17 @@ export function useXmlImport({
   const validBatchSummaries = useMemo(
     () =>
       entrySummaries.filter(
-        (s) => !s.entry.error && s.entry.selectedForBatch && s.selectedItems.some((it) => it.amountCents > 0)
+        (s) =>
+          !s.entry.error &&
+          !s.isBlockedByFiscalLock &&
+          s.entry.selectedForBatch &&
+          s.selectedItems.some((it) => it.amountCents > 0)
       ),
+    [entrySummaries]
+  );
+
+  const hasBlockedBatchEntries = useMemo(
+    () => entrySummaries.some((s) => !s.entry.error && s.entry.selectedForBatch && s.isBlockedByFiscalLock),
     [entrySummaries]
   );
 
@@ -750,6 +763,7 @@ export function useXmlImport({
     viewMode,
     setViewMode,
     validBatchSummaries,
+    hasBlockedBatchEntries,
     batchTotalCents,
     batchTotalInstallments,
     handleFilesSelected,
@@ -795,7 +809,7 @@ export function useXmlImport({
     setAdjustmentReason,
     adjustmentNotes: activeEntry?.adjustmentNotes || '',
     setAdjustmentNotes,
-    requiresCompanyAttention: activeSummary?.requiresCompanyAttention || false,
+    isBlockedByFiscalLock: activeSummary?.isBlockedByFiscalLock || false,
 
     // Actions
     handleFileChange,

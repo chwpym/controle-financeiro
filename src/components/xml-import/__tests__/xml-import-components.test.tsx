@@ -1,10 +1,11 @@
 /**
- * EN: Component & Integration tests for the Evolved XML Import Center (Phase 11.1).
- *     Covers Compact Dropzone, Fiscal CNPJ Validation Card, Inline Installment Editing,
- *     Real-Time Reconciliation with Commercial Adjustments, and Multi-XML Batch Import.
- * PT: Testes de Componentes e Integração da Central de Importação XML Evoluída (Fase 11.1).
- *     Cobre Dropzone Compacto, Card de Validação Fiscal, Edição Inline de Parcelas,
- *     Batimento em Tempo Real com Ajustes Comerciais e Importação em Massa Multi-XML.
+ * EN: Component & Integration tests for the Evolved XML Import Center (v1.11.0).
+ *     Covers Compact Dropzone, Strict Two-Agent Fiscal Lock (SEFAZ Rule), Overflow-Safe Layout,
+ *     Buyer/Seller Badges & Counterparty-Only Registration, Inline Installment Editing,
+ *     Commercial Adjustments, and Multi-XML Batch Import.
+ * PT: Testes de Componentes e Integração da Central de Importação XML Evoluída (v1.11.0).
+ *     Cobre Dropzone Compacto, Trava Rígida de Dois Agentes (SEFAZ), Layout sem Vazamento,
+ *     Badges de Empresa Compradora/Vendedora, Edição Inline, Ajustes Comerciais e Multi-XML.
  */
 
 import React from 'react';
@@ -29,7 +30,7 @@ import {
 const mockCompany: Company = {
   id: 'comp-1',
   userId: 'user-1',
-  legalName: 'GENUINA AUTO PECAS LTDA',
+  legalName: 'GENUINA COMERCIAL LINENSE DE PECAS AUTOMOTIVAS LTDA 00193108',
   tradeName: 'Genuína',
   document: '98.765.432/0001-88',
   stateRegistration: '',
@@ -52,7 +53,7 @@ const mockCompany: Company = {
   updatedAt: '',
 };
 
-describe('XmlImport Modular Subcomponents (Phase 11.1)', () => {
+describe('XmlImport Modular Subcomponents (v1.11.0)', () => {
   it('XmlDropzone renders empty dropzone with multiple support and shrinks to compact 1-line bar when file is loaded', () => {
     const handleFiles = vi.fn();
     const handleClear = vi.fn();
@@ -90,65 +91,160 @@ describe('XmlImport Modular Subcomponents (Phase 11.1)', () => {
     expect(handleClear).toHaveBeenCalledTimes(1);
   });
 
-  it('XmlFiscalValidationCard displays Issuer vs Recipient, linked badge, and Safety Lock alert when unmatched', () => {
-    const supplierNfe = analyzeXmlDocument(`
+  it('XmlFiscalValidationCard enforces overflow-safe layout, Buyer/Seller badges, and Strict Two-Agent Security Lock without arbitrary dropdown', () => {
+    const purchaseNfe = analyzeXmlDocument(`
       <NFe>
         <infNFe>
           <ide><nNF>777</nNF><tpNF>1</tpNF><dhEmi>2026-11-25</dhEmi></ide>
-          <emit><CNPJ>12345678000195</CNPJ><xNome>PECAS BRASIL LTDA</xNome></emit>
-          <dest><CNPJ>98765432000188</CNPJ><xNome>GENUINA AUTO PECAS LTDA</xNome></dest>
+          <emit><CNPJ>12345678000195</CNPJ><xNome>PECAS BRASIL DISTRIBUIDORA NACIONAL LTDA</xNome></emit>
+          <dest><CNPJ>98765432000188</CNPJ><xNome>GENUINA COMERCIAL LINENSE DE PECAS AUTOMOTIVAS LTDA 00193108</xNome></dest>
           <total><ICMSTot><vNF>400.00</vNF></ICMSTot></total>
         </infNFe>
       </NFe>
     `);
 
-    const matchedDetection = detectXmlOperation(supplierNfe, [mockCompany]);
+    const buyerDetection = detectXmlOperation(purchaseNfe, [mockCompany]);
     const onOpenModal = vi.fn();
+    const onGoToCompanies = vi.fn();
 
     const { rerender } = render(
       <XmlFiscalValidationCard
-        analysis={supplierNfe}
-        detection={matchedDetection}
+        analysis={purchaseNfe}
+        detection={buyerDetection}
         companies={[mockCompany]}
-        companyId={matchedDetection.companyId}
-        onChangeCompanyId={vi.fn()}
-        txType={matchedDetection.txType}
-        onChangeTxType={vi.fn()}
+        txType={buyerDetection.txType}
         isContactBound={false}
         isCreatingContact={false}
         onAutoCreateContact={vi.fn()}
         onOpenContactModal={onOpenModal}
+        onNavigateToCompanies={onGoToCompanies}
       />
     );
 
-    expect(screen.getByText(/Vinculado à empresa: Genuína/i)).toBeInTheDocument();
-    expect(screen.getByText('PECAS BRASIL LTDA')).toBeInTheDocument();
-    expect(screen.getByText('GENUINA AUTO PECAS LTDA')).toBeInTheDocument();
+    // 1. Overflow-safe classes on both cards & NO third-party company select dropdown
+    expect(screen.getByTestId('xml-issuer-card').className).toContain('min-w-0');
+    expect(screen.getByTestId('xml-issuer-card').className).toContain('overflow-hidden');
+    expect(screen.getByTestId('xml-recipient-card').className).toContain('min-w-0');
+    expect(screen.getByTestId('xml-recipient-card').className).toContain('overflow-hidden');
+    expect(screen.queryByTestId('xml-company-select')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId('xml-open-contact-modal-btn'));
+    // 2. Recipient is our company -> Buyer badge + ONLY [+ Cadastrar Fornecedor] on Issuer
+    expect(screen.getByTestId('xml-badge-own-buyer')).toHaveTextContent('🏢 Sua Empresa (Compradora)');
+    expect(screen.getByTestId('xml-register-supplier-btn')).toHaveTextContent('+ Cadastrar Fornecedor');
+    expect(screen.queryByTestId('xml-register-customer-btn')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('xml-register-supplier-btn'));
     expect(onOpenModal).toHaveBeenCalledTimes(1);
 
-    // Unmatched scenario -> Safety Lock Alert
-    const unmatchedDetection = detectXmlOperation(supplierNfe, [
+    // 3. Sale scenario: Issuer is our company -> Seller badge + ONLY [+ Cadastrar Cliente] on Recipient
+    const saleNfe = analyzeXmlDocument(`
+      <NFe>
+        <infNFe>
+          <ide><nNF>778</nNF><tpNF>1</tpNF><dhEmi>2026-11-25</dhEmi></ide>
+          <emit><CNPJ>98765432000188</CNPJ><xNome>GENUINA COMERCIAL LINENSE DE PECAS AUTOMOTIVAS LTDA 00193108</xNome></emit>
+          <dest><CNPJ>44555666000177</CNPJ><xNome>AUTO ELETRICA CLIENTE LTDA</xNome></dest>
+          <total><ICMSTot><vNF>850.00</vNF></ICMSTot></total>
+        </infNFe>
+      </NFe>
+    `);
+    const sellerDetection = detectXmlOperation(saleNfe, [mockCompany]);
+
+    rerender(
+      <XmlFiscalValidationCard
+        analysis={saleNfe}
+        detection={sellerDetection}
+        companies={[mockCompany]}
+        txType={sellerDetection.txType}
+        isContactBound={false}
+        isCreatingContact={false}
+        onAutoCreateContact={vi.fn()}
+        onOpenContactModal={onOpenModal}
+        onNavigateToCompanies={onGoToCompanies}
+      />
+    );
+
+    expect(screen.getByTestId('xml-badge-own-seller')).toHaveTextContent('🏢 Sua Empresa (Vendedora)');
+    expect(screen.getByTestId('xml-register-customer-btn')).toHaveTextContent('+ Cadastrar Cliente');
+    expect(screen.queryByTestId('xml-register-supplier-btn')).not.toBeInTheDocument();
+
+    // 4. Unmatched scenario -> Hard Fiscal Security Lock, NO contact register buttons, Go to Companies button
+    const unmatchedDetection = detectXmlOperation(purchaseNfe, [
       { ...mockCompany, document: '11.111.111/0001-11' },
     ]);
 
     rerender(
       <XmlFiscalValidationCard
-        analysis={supplierNfe}
+        analysis={purchaseNfe}
         detection={unmatchedDetection}
         companies={[{ ...mockCompany, document: '11.111.111/0001-11' }]}
-        companyId=""
-        onChangeCompanyId={vi.fn()}
         txType="payable"
-        onChangeTxType={vi.fn()}
         isContactBound={false}
         isCreatingContact={false}
         onAutoCreateContact={vi.fn()}
+        onNavigateToCompanies={onGoToCompanies}
+        onCancel={vi.fn()}
       />
     );
 
-    expect(screen.getByText(/CNPJ não cadastrado em Minhas Empresas/i)).toBeInTheDocument();
+    expect(screen.getByTestId('xml-fiscal-security-lock')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Trava de Segurança Fiscal: Nota não reconhecida/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId('xml-register-supplier-btn')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('xml-register-customer-btn')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('xml-go-to-companies-btn'));
+    expect(onGoToCompanies).toHaveBeenCalledTimes(1);
+  });
+
+  it('XmlImportModal strictly disables [Importar] and navigates to Minhas Empresas when neither CNPJ belongs to user companies', async () => {
+    const onImport = vi.fn();
+    const onClose = vi.fn();
+    const onNavigateToCompanies = vi.fn();
+
+    const unrecognizedXml = `
+      <NFe>
+        <infNFe>
+          <ide><nNF>9999</nNF><tpNF>1</tpNF><dhEmi>2026-11-25</dhEmi></ide>
+          <emit><CNPJ>12345678000195</CNPJ><xNome>EMITENTE TERCEIRO LTDA</xNome></emit>
+          <dest><CNPJ>55666777000188</CNPJ><xNome>DESTINATARIO TERCEIRO LTDA</xNome></dest>
+          <total><ICMSTot><vNF>500.00</vNF></ICMSTot></total>
+        </infNFe>
+      </NFe>
+    `;
+
+    const { container } = render(
+      <XmlImportModal
+        userId="user-1"
+        categories={[]}
+        contacts={[]}
+        companies={[mockCompany]}
+        selectedCompanyId="all"
+        existingTransactions={[]}
+        onClose={onClose}
+        onImport={onImport}
+        onCreateContact={vi.fn()}
+        onNavigateToCompanies={onNavigateToCompanies}
+      />
+    );
+
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const f = new File([unrecognizedXml], 'terceiro.xml', { type: 'text/xml' });
+    fireEvent.change(fileInput, { target: { files: [f] } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('xml-fiscal-security-lock')).toBeInTheDocument();
+    });
+
+    // Import button MUST be strictly disabled
+    const confirmBtn = screen.getByTestId('xml-confirm-import-btn');
+    expect(confirmBtn).toBeDisabled();
+
+    // Clicking [🏢 Ir para Minhas Empresas] closes modal and triggers navigation
+    fireEvent.click(screen.getByTestId('xml-go-to-companies-btn'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onNavigateToCompanies).toHaveBeenCalledTimes(1);
+    expect(onImport).not.toHaveBeenCalled();
   });
 
   it('XmlPreviewTable supports inline editing of dueDate and amountCents and renders Commercial Adjustment panel', () => {
@@ -205,18 +301,15 @@ describe('XmlImport Modular Subcomponents (Phase 11.1)', () => {
       /Valores Batendo \(100% Conferido\)/i
     );
 
-    // Inline Date Edit
     const dueInput = screen.getByTestId('xml-duedate-input-item-1') as HTMLInputElement;
     fireEvent.change(dueInput, { target: { value: '2026-12-20' } });
     expect(handleUpdateItem).toHaveBeenCalledWith('item-1', { dueDate: '2026-12-20' });
 
-    // Inline Money Edit
     const amountInput = screen.getByTestId('xml-amount-input-item-1') as HTMLInputElement;
     fireEvent.focus(amountInput);
     fireEvent.change(amountInput, { target: { value: '120,00' } });
     expect(handleUpdateItem).toHaveBeenCalledWith('item-1', { amountCents: 12000 });
 
-    // Negative Divergence (- R$ 30,00 Warranty Credit)
     rerender(
       <XmlPreviewTable
         items={mockItems}
@@ -305,7 +398,7 @@ describe('XmlImport Modular Subcomponents (Phase 11.1)', () => {
         <infNFe>
           <ide><nNF>1001</nNF><tpNF>1</tpNF><dhEmi>2026-11-20</dhEmi></ide>
           <emit><CNPJ>12345678000195</CNPJ><xNome>FORNECEDOR UM LTDA</xNome></emit>
-          <dest><CNPJ>98765432000188</CNPJ><xNome>GENUINA AUTO PECAS LTDA</xNome></dest>
+          <dest><CNPJ>98765432000188</CNPJ><xNome>GENUINA COMERCIAL LINENSE DE PECAS AUTOMOTIVAS LTDA 00193108</xNome></dest>
           <total><ICMSTot><vNF>200.00</vNF></ICMSTot></total>
           <cobr><dup><nDup>01</nDup><dVenc>2026-12-20</dVenc><vDup>225.00</vDup></dup></cobr>
         </infNFe>
@@ -316,7 +409,7 @@ describe('XmlImport Modular Subcomponents (Phase 11.1)', () => {
       <NFe>
         <infNFe>
           <ide><nNF>1002</nNF><tpNF>1</tpNF><dhEmi>2026-11-21</dhEmi></ide>
-          <emit><CNPJ>98765432000188</CNPJ><xNome>GENUINA AUTO PECAS LTDA</xNome></emit>
+          <emit><CNPJ>98765432000188</CNPJ><xNome>GENUINA COMERCIAL LINENSE DE PECAS AUTOMOTIVAS LTDA 00193108</xNome></emit>
           <dest><CNPJ>44555666000177</CNPJ><xNome>OFICINA CLIENTE LTDA</xNome></dest>
           <total><ICMSTot><vNF>350.00</vNF></ICMSTot></total>
           <cobr><dup><nDup>01</nDup><dVenc>2026-12-21</dVenc><vDup>350.00</vDup></dup></cobr>
@@ -360,14 +453,12 @@ describe('XmlImport Modular Subcomponents (Phase 11.1)', () => {
     const importedTxs = onImport.mock.calls[0][0] as Transaction[];
     expect(importedTxs).toHaveLength(2);
 
-    // First note: dest=Genuína -> Payable + R$ 25,00 positive adjustment saved in interestCents
     expect(importedTxs[0].type).toBe('payable');
     expect(importedTxs[0].companyId).toBe('comp-1');
     expect(importedTxs[0].amountCents).toBe(22500);
     expect(importedTxs[0].interestCents).toBe(2500);
     expect(importedTxs[0].notes).toContain('Frete por Fora');
 
-    // Second note: emit=Genuína -> Receivable
     expect(importedTxs[1].type).toBe('receivable');
     expect(importedTxs[1].companyId).toBe('comp-1');
     expect(importedTxs[1].amountCents).toBe(35000);

@@ -48,6 +48,8 @@ interface SettingsViewProps {
   onOpenUpdateCenter?: () => void;
   /** Opens the System Release / License Activation modal / Abre a tela de Liberação do Sistema */
   onOpenSystemRelease?: () => void;
+  /** Initial sub-tab to focus ('companies' | 'general') / Aba inicial de configurações */
+  initialTab?: 'companies' | 'general';
 }
 
 const COLOR_PRESETS = [
@@ -89,6 +91,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onCompaniesChange,
   onOpenUpdateCenter,
   onOpenSystemRelease,
+  initialTab = 'companies',
 }) => {
   // Create form
   const [catName, setCatName] = useState('');
@@ -109,7 +112,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [backupMessage, setBackupMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
   const [restoring, setRestoring] = useState(false);
   const [notifySavedMsg, setNotifySavedMsg] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<'companies' | 'general'>('companies');
+  const [settingsTab, setSettingsTab] = useState<'companies' | 'general'>(initialTab);
+
+  React.useEffect(() => {
+    setSettingsTab(initialTab);
+  }, [initialTab]);
 
   const LEAD_DAY_PRESETS = [
     { value: 0, label: 'No dia' },

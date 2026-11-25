@@ -38,10 +38,15 @@ interface ChangelogEntry {
  */
 const CHANGELOG_ITEMS: ChangelogEntry[] = [
   {
+    version: 'v1.11.0',
+    description:
+      'Central de Importação XML evoluída com detecção fiscal estrita Emitente/Destinatário, trava de segurança SEFAZ, edição inline, batimento comercial e Multi-XML.',
+    isLatest: true,
+  },
+  {
     version: 'v1.10.1',
     description:
       'Central de Atualizações & Diagnóstico em tempo real, Deploy Badge no rodapé e Auto-Update do cache PWA.',
-    isLatest: true,
   },
   {
     version: 'v1.9.3',

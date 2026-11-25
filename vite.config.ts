@@ -11,16 +11,17 @@ import {VitePWA} from 'vite-plugin-pwa';
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 
 /**
- * Resolve the application semantic version automatically using `<major>.<minor>` from `package.json`
- * combined with the Git commit count (`git rev-list --count HEAD`) as the patch number (e.g., `1.10.26`).
- * Falls back gracefully to the exact `package.json` version when Git history is unavailable or inside Vitest child workers.
- *
- * Resolve automaticamente a versão semântica combinando `<major>.<minor>` do `package.json` com a
- * contagem total de commits do Git (`git rev-list --count HEAD`) no último dígito (ex: `1.10.26`).
- * Assim, todo novo `git commit` incrementa a versão sozinho sem precisar editar arquivos manualmente.
+ * EN: Resolves the application semantic version (`1.11.0` from `package.json`).
+ *     When running on Render (`process.env.RENDER`) or when `git rev-list --count HEAD` returns 1
+ *     (shallow clone `--depth 1`), uses the exact `package.json` version (`1.11.0`) so footer and
+ *     sidebar always display `v1.11.0 • <commit>` in production.
+ * PT: Resolve a versão semântica da aplicação (`1.11.0` do `package.json`).
+ *     Quando `process.env.RENDER` estiver ativo ou a contagem do Git for 1 (shallow clone `--depth 1`),
+ *     utiliza a versão declarada no `package.json` (`1.11.0`), garantindo que rodapé e sidebar mostrem
+ *     sempre `v1.11.0 • <commit>` em produção.
  */
 function resolveAppVersion(skipSubprocess = false): string {
-  let baseVersion = '1.10.2';
+  let baseVersion = '1.11.0';
   try {
     const pkgPath = path.resolve(rootDir, 'package.json');
     const pkgRaw = fs.readFileSync(pkgPath, 'utf-8');
@@ -32,7 +33,9 @@ function resolveAppVersion(skipSubprocess = false): string {
     // Keep fallback baseVersion / Mantém baseVersion padrão
   }
 
-  if (skipSubprocess) {
+  // On Render CI/CD or inside Vitest child workers, always honor package.json version (1.11.0)
+  // No ambiente Render ou em workers do Vitest, utiliza diretamente a versão oficial do package.json (1.11.0)
+  if (skipSubprocess || Boolean(process.env.RENDER)) {
     return baseVersion;
   }
 
@@ -44,10 +47,18 @@ function resolveAppVersion(skipSubprocess = false): string {
       .toString()
       .trim();
     const commitCount = Number.parseInt(commitCountRaw, 10);
-    if (Number.isFinite(commitCount) && commitCount > 0) {
+    // Shallow clones (--depth 1) report count === 1; keep exact package.json version in that case
+    // Clones rasos (--depth 1) retornam contagem === 1; mantém a versão exata do package.json
+    if (Number.isFinite(commitCount) && commitCount > 1) {
       const parts = baseVersion.split('.');
       const major = parts[0] || '1';
-      const minor = parts[1] || '10';
+      const minor = parts[1] || '11';
+      const declaredPatch = Number.parseInt(parts[2] || '0', 10);
+      // If package.json just bumped minor (patch === 0, e.g. 1.11.0), keep 1.11.0 cleanly;
+      // otherwise allow local git count when higher than declared patch.
+      if (declaredPatch === 0) {
+        return baseVersion;
+      }
       return `${major}.${minor}.${commitCount}`;
     }
   } catch {

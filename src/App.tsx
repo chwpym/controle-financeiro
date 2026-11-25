@@ -131,6 +131,7 @@ export default function App() {
 
   const [user, setUser] = useState<UserProfile | null>(() => getSavedSession()?.user || null);
   const [activeView, setActiveView] = useState<AppView>('dashboard');
+  const [settingsInitialTab, setSettingsInitialTab] = useState<'companies' | 'general'>('companies');
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthKey);
   const [txInitialFilter, setTxInitialFilter] = useState<string>('all');
 
@@ -1348,6 +1349,7 @@ export default function App() {
                   onCompaniesChange={setCompanies}
                   onOpenUpdateCenter={() => setUpdateCenterOpen(true)}
                   onOpenSystemRelease={() => setSystemReleaseOpen(true)}
+                  initialTab={settingsInitialTab}
                 />
               )}
 
@@ -1558,6 +1560,11 @@ export default function App() {
           onClose={() => setXmlModalOpen(false)}
           onImport={handleSaveTransactionBatch}
           onCreateContact={handleSaveContact}
+          onNavigateToCompanies={() => {
+            setXmlModalOpen(false);
+            setSettingsInitialTab('companies');
+            setActiveView('settings');
+          }}
         />
       )}
 

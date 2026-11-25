@@ -42,6 +42,7 @@ export interface XmlImportModalProps {
   onClose: () => void;
   onImport: (items: Transaction[]) => void;
   onCreateContact: (contact: Contact) => Promise<void> | void;
+  onNavigateToCompanies?: () => void;
 }
 
 const EMPTY_CONTACT_FORM: ContactFormData = {
@@ -63,7 +64,7 @@ const EMPTY_CONTACT_FORM: ContactFormData = {
 };
 
 export const XmlImportModal: React.FC<XmlImportModalProps> = (props) => {
-  const { userId, categories, contacts, companies = [], onClose } = props;
+  const { userId, categories, contacts, companies = [], onClose, onNavigateToCompanies } = props;
   const {
     entries,
     entrySummaries,
@@ -85,8 +86,6 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = (props) => {
     detection,
     error,
     txType,
-    companyId,
-    setCompanyId,
     categoryId,
     setCategoryId,
     contactId,
@@ -109,6 +108,7 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = (props) => {
     setAdjustmentReason,
     adjustmentNotes,
     setAdjustmentNotes,
+    isBlockedByFiscalLock,
 
     handleFileChange,
     handleTypeChange,
@@ -428,8 +428,6 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = (props) => {
                   analysis={analysis}
                   detection={detection}
                   companies={companies}
-                  companyId={companyId}
-                  onChangeCompanyId={setCompanyId}
                   txType={txType}
                   onChangeTxType={handleTypeChange}
                   isContactBound={Boolean(contactId)}
@@ -437,43 +435,56 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = (props) => {
                   isCreatingContact={creatingContact}
                   onAutoCreateContact={handleAutoCreateContact}
                   onOpenContactModal={handleOpenContactDrawer}
+                  onNavigateToCompanies={
+                    onNavigateToCompanies
+                      ? () => {
+                          onClose();
+                          onNavigateToCompanies();
+                        }
+                      : undefined
+                  }
+                  onCancel={onClose}
                 />
 
-                {analysis.kind === 'generic' && (
-                  <XmlGenericMapping
-                    recordTag={analysis.recordTag}
-                    fields={analysis.fields}
-                    mapping={mapping}
-                    onChangeMapping={setMapping}
-                  />
+                {!isBlockedByFiscalLock && (
+                  <>
+                    {analysis.kind === 'generic' && (
+                      <XmlGenericMapping
+                        recordTag={analysis.recordTag}
+                        fields={analysis.fields}
+                        mapping={mapping}
+                        onChangeMapping={setMapping}
+                      />
+                    )}
+
+                    <XmlDestinationFields
+                      txType={txType}
+                      categories={categories}
+                      categoryId={categoryId}
+                      onChangeCategory={setCategoryId}
+                      contacts={contacts}
+                      contactId={contactId}
+                      onChangeContact={setContactId}
+                    />
+
+                    <XmlPreviewTable
+                      items={previewItems}
+                      excludedIds={excludedIds}
+                      duplicateIds={duplicateIds}
+                      onToggleItem={toggleItem}
+                      onUncheckDuplicates={() => setExcludedIds(new Set(duplicateIds))}
+                      onUpdateItem={updateInstallmentItem}
+                      invoiceTotalCents={invoiceTotalCents}
+                      installmentsTotalCents={installmentsTotalCents}
+                      divergenceCents={divergenceCents}
+                      adjustmentType={adjustmentType}
+                      adjustmentReason={adjustmentReason}
+                      onChangeAdjustmentReason={setAdjustmentReason}
+                      adjustmentNotes={adjustmentNotes}
+                      onChangeAdjustmentNotes={setAdjustmentNotes}
+                    />
+                  </>
                 )}
-
-                <XmlDestinationFields
-                  txType={txType}
-                  categories={categories}
-                  categoryId={categoryId}
-                  onChangeCategory={setCategoryId}
-                  contacts={contacts}
-                  contactId={contactId}
-                  onChangeContact={setContactId}
-                />
-
-                <XmlPreviewTable
-                  items={previewItems}
-                  excludedIds={excludedIds}
-                  duplicateIds={duplicateIds}
-                  onToggleItem={toggleItem}
-                  onUncheckDuplicates={() => setExcludedIds(new Set(duplicateIds))}
-                  onUpdateItem={updateInstallmentItem}
-                  invoiceTotalCents={invoiceTotalCents}
-                  installmentsTotalCents={installmentsTotalCents}
-                  divergenceCents={divergenceCents}
-                  adjustmentType={adjustmentType}
-                  adjustmentReason={adjustmentReason}
-                  onChangeAdjustmentReason={setAdjustmentReason}
-                  adjustmentNotes={adjustmentNotes}
-                  onChangeAdjustmentNotes={setAdjustmentNotes}
-                />
               </>
             )}
           </div>
@@ -506,9 +517,9 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = (props) => {
                   {viewMode === 'single' && (
                     <button
                       type="button"
-                      disabled={validSingleCount === 0}
+                      disabled={validSingleCount === 0 || isBlockedByFiscalLock}
                       onClick={handleConfirmImport}
-                      className="px-4 py-2 rounded-xl border border-teal-600 text-teal-800 dark:text-teal-300 text-sm font-semibold hover:bg-teal-50 dark:hover:bg-teal-950/40 disabled:opacity-50 transition-colors min-h-[42px] cursor-pointer"
+                      className="px-4 py-2 rounded-xl border border-teal-600 text-teal-800 dark:text-teal-300 text-sm font-semibold hover:bg-teal-50 dark:hover:bg-teal-950/40 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[42px] cursor-pointer"
                     >
                       Importar Apenas Esta ({validSingleCount})
                     </button>
@@ -518,7 +529,7 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = (props) => {
                     disabled={validBatchSummaries.length === 0}
                     onClick={handleConfirmBatchImport}
                     data-testid="xml-import-all-btn"
-                    className="px-5 py-2 rounded-xl bg-teal-700 text-white text-sm font-semibold hover:bg-teal-800 disabled:opacity-50 transition-colors min-h-[42px] cursor-pointer"
+                    className="px-5 py-2 rounded-xl bg-teal-700 text-white text-sm font-semibold hover:bg-teal-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[42px] cursor-pointer"
                   >
                     Importar Todas as Notas ({validBatchSummaries.length})
                   </button>
@@ -526,12 +537,12 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = (props) => {
               ) : (
                 <button
                   type="button"
-                  disabled={validSingleCount === 0}
+                  disabled={validSingleCount === 0 || isBlockedByFiscalLock}
                   onClick={handleConfirmImport}
                   data-testid="xml-confirm-import-btn"
-                  className="px-5 py-2 rounded-xl bg-teal-700 text-white text-sm font-semibold hover:bg-teal-800 disabled:opacity-50 transition-colors min-h-[42px] cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-teal-700 text-white text-sm font-semibold hover:bg-teal-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[42px] cursor-pointer"
                 >
-                  Importar {validSingleCount > 0 ? `(${validSingleCount})` : ''}
+                  Importar {!isBlockedByFiscalLock && validSingleCount > 0 ? `(${validSingleCount})` : ''}
                 </button>
               )}
             </div>

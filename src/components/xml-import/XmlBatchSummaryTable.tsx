@@ -58,7 +58,7 @@ export const XmlBatchSummaryTable: React.FC<XmlBatchSummaryTableProps> = ({
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {summaries.map((summary) => {
-              const { entry, selectedItems, installmentsTotalCents, adjustmentType, requiresCompanyAttention } =
+              const { entry, selectedItems, installmentsTotalCents, adjustmentType, isBlockedByFiscalLock } =
                 summary;
               const analysis = entry.analysis;
               const comp = entry.companyId ? companyMap.get(entry.companyId) : undefined;
@@ -93,8 +93,8 @@ export const XmlBatchSummaryTable: React.FC<XmlBatchSummaryTableProps> = ({
                   <td className="py-2.5 pl-3 pr-2 align-middle">
                     <input
                       type="checkbox"
-                      disabled={Boolean(entry.error)}
-                      checked={Boolean(entry.selectedForBatch && !entry.error)}
+                      disabled={Boolean(entry.error || isBlockedByFiscalLock)}
+                      checked={Boolean(entry.selectedForBatch && !entry.error && !isBlockedByFiscalLock)}
                       onChange={() => onToggleSelect(entry.id)}
                       aria-label={`Incluir ${entry.fileName} no lote`}
                       className="rounded border-slate-300 text-teal-700 w-4 h-4 cursor-pointer disabled:opacity-40"
@@ -133,9 +133,9 @@ export const XmlBatchSummaryTable: React.FC<XmlBatchSummaryTableProps> = ({
                           {entry.txType === 'receivable' ? 'A Receber' : 'A Pagar'}
                         </span>
                         <div className="text-[11px] flex items-center gap-1">
-                          {requiresCompanyAttention ? (
-                            <span className="text-amber-700 dark:text-amber-400 font-semibold inline-flex items-center gap-1">
-                              <ShieldAlert className="w-3 h-3 shrink-0" /> Escolher empresa
+                          {isBlockedByFiscalLock ? (
+                            <span className="text-rose-700 dark:text-rose-400 font-semibold inline-flex items-center gap-1">
+                              <ShieldAlert className="w-3 h-3 shrink-0" /> Nota não reconhecida
                             </span>
                           ) : comp ? (
                             <span className="text-slate-600 dark:text-slate-300 inline-flex items-center gap-1 truncate max-w-[140px]">

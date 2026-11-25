@@ -643,13 +643,17 @@ export function detectXmlOperation(
     };
   }
 
-  // Rule 3: Neither CNPJ matches registered companies -> Default to Payable & require explicit confirmation/selection
-  // Regra 3: Nenhum CNPJ cadastrado -> Padrão Conta a Pagar (Segurança Fiscal) sem forçar Receivable por tpNF=1
+  // Rule 3: Strict Two-Agent Fiscal Integrity Lock (SEFAZ Rule):
+  // An NF-e / NFS-e only exists between two parties (Issuer and Recipient).
+  // If neither CNPJ matches a registered company, NEVER bind to an arbitrary third-party company!
+  // Regra 3: Trava Estrita de Dois Agentes (SEFAZ):
+  // Uma NF-e / NFS-e só existe entre Emitente e Destinatário.
+  // Se nenhum CNPJ pertencer a uma empresa sua cadastrada, NUNCA vincular a uma empresa terceira!
   return {
     txType: 'payable',
     matchedRole: 'none',
     matchedCompany: null,
-    companyId: resolveFallbackCompanyId(),
+    companyId: '',
     counterpartyRole: 'supplier',
     counterpartyName: issuerName,
     counterpartyTradeName: issuerTradeName,

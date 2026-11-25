@@ -203,6 +203,7 @@ describe('analyzeXmlDocument & detectXmlOperation (Phase 11.1)', () => {
     expect(detection.matchedRole).toBe('none');
     expect(detection.txType).toBe('payable');
     expect(detection.matchedCompany).toBeNull();
+    expect(detection.companyId).toBe('');
     expect(detection.counterpartyName).toBe('FORNECEDOR EXTERNO LTDA');
   });
 

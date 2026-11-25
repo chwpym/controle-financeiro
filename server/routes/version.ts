@@ -19,16 +19,13 @@ const ROOT_DIR = path.resolve(__dirname, '../..');
 const SERVER_BOOT_TIME = new Date().toISOString();
 
 /**
- * Resolves the semantic version automatically by combining `<major>.<minor>` from `package.json`
- * with the Git commit count (`git rev-list --count HEAD`) so every commit increments the patch automatically
- * (e.g., `1.10.26`), falling back to `package.json` when `.git` is unavailable.
- *
- * Resolve a versão semântica automaticamente combinando `<major>.<minor>` do `package.json` com o
- * total de commits do Git (`git rev-list --count HEAD`), incrementando o último número a cada commit
- * (ex: `1.10.26`), com fallback seguro para o `package.json` caso `.git` não esteja presente.
+ * EN: Resolves the backend semantic version aligned with `vite.config.ts`.
+ *     Honors `package.json` (`1.11.0`) on Render (`process.env.RENDER`) or shallow clones (`count <= 1`).
+ * PT: Resolve a versão semântica no servidor alinhada ao `vite.config.ts`.
+ *     Prioriza a versão declarada no `package.json` (`1.11.0`) no Render ou em shallow clone (`count <= 1`).
  */
 function resolveServerVersion(): string {
-  let baseVersion = '1.10.2';
+  let baseVersion = '1.11.0';
   try {
     const pkgPath = path.resolve(ROOT_DIR, 'package.json');
     const raw = fs.readFileSync(pkgPath, 'utf-8');
@@ -40,6 +37,10 @@ function resolveServerVersion(): string {
     // Keep fallback baseVersion / Mantém versão base de segurança
   }
 
+  if (Boolean(process.env.RENDER)) {
+    return baseVersion;
+  }
+
   try {
     const commitCountRaw = execSync('git rev-list --count HEAD', {
       cwd: ROOT_DIR,
@@ -48,10 +49,14 @@ function resolveServerVersion(): string {
       .toString()
       .trim();
     const commitCount = Number.parseInt(commitCountRaw, 10);
-    if (Number.isFinite(commitCount) && commitCount > 0) {
+    if (Number.isFinite(commitCount) && commitCount > 1) {
       const parts = baseVersion.split('.');
       const major = parts[0] || '1';
-      const minor = parts[1] || '10';
+      const minor = parts[1] || '11';
+      const declaredPatch = Number.parseInt(parts[2] || '0', 10);
+      if (declaredPatch === 0) {
+        return baseVersion;
+      }
       return `${major}.${minor}.${commitCount}`;
     }
   } catch {
