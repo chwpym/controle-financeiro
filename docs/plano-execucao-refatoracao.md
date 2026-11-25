@@ -299,8 +299,9 @@ Implementar governança de versões, eliminação de problemas de cache do PWA n
 - **Importação em Massa (Multi-XML):**
   - Suporte a seleção ou arraste de múltiplos arquivos XML simultâneos (`multiple`), processamento assíncrono em fila e tabela consolidada de resumo com status, conferência, inspeção e botão de importação em lote (`[ Importar Todas as Notas (X) ]`).
 - **Validação:** 125 testes passando no Vitest (100% verde em 16 arquivos), 0 erros de TypeScript (`npm run lint`).
-- **Refinamento Visual Registrado (Modal Clean):**
-  - Como a empresa vinculada já aparece na pílula superior (`Vinculado à empresa: GENUINA`), eliminar o card redundante de "Sua Empresa" e exibir apenas o card compacto do Fornecedor (ou Cliente) com seu botão de cadastro, tornando o layout mais *clean* e liberando mais espaço vertical.
+- **Refinamento Visual Registrado (Modal Clean & Recibo Comercial Simplificado):**
+  - **Modal XML Clean:** Como a empresa vinculada já aparece na pílula superior (`Vinculado à empresa: GENUINA`), eliminar o card redundante de "Sua Empresa" e exibir apenas o card compacto do Fornecedor (ou Cliente) com seu botão de cadastro, tornando o layout mais *clean* e liberando mais espaço vertical.
+  - **Recibo/Comprovante Comercial Limpo (PDF):** O comprovante entregue ao cliente/fornecedor deve conter estritamente dados comerciais do pagamento (Empresa, Cliente, Valor, Parcela, Vencimento, Forma de Pagamento e Assinatura). Remover dados estritamente internos do sistema (como "Usuário responsável: master", "Origem: Importação XML", "Conta Recorrente: Não" e "Categoria: Vendas"), além de corrigir o espaçamento da assinatura para não sobrepor as observações.
 
 ### 📋 Etapa 11.2: Modularização das Telas Restantes
 Decomposição arquitetural para modularizar e reduzir para menos de 250 linhas os componentes remanescentes:
