@@ -277,7 +277,7 @@ Implementar governança de versões, eliminação de problemas de cache do PWA n
 
 ## 📋 FASE 11: Evolução da Central de XML & Modularização das Telas Restantes
 
-### 📋 Etapa 11.1: Evolução do Importador XML (Layout Compacto, Validação Fiscal, Edição Inline, Batimento de Valores/Ajustes Comerciais e Multi-XML em Massa)
+### ✅ Etapa 11.1: Concluída com Sucesso (Evolução do Importador XML, Layout Compacto, Validação Fiscal, Edição Inline, Batimento com Ajustes Comerciais e Multi-XML)
 - **Compactação de Layout pós-upload:**
   - A caixa de dropzone grande recolhe-se automaticamente após o carregamento para uma barra horizontal compacta de 1 linha (`📄 NF-e ... • Arquivo ... [ 🔄 Trocar XML ]`), liberando ~150px de altura vertical para visualização completa das parcelas sem rolagem excessiva.
 - **Card Explícito de Validação Fiscal & Vínculo Multi-Empresas:**
@@ -287,23 +287,15 @@ Implementar governança de versões, eliminação de problemas de cache do PWA n
     - Se nenhum CNPJ coincidir: exibição de **Card de Alerta com Trava de Segurança** destacando *"Atenção: Nem o Emitente nem o Destinatário correspondem a uma empresa cadastrada"*, com dropdown para vincular à empresa correta e seleção manual da operação, além de atalho direto para cadastro rápido de Fornecedor/Cliente sem perder os dados da nota.
   - Vínculo persistido do `company_id` nos lançamentos importados.
 - **Edição Direta de Parcelas na Tabela de Pré-visualização (Inline Editing):**
-  - Inputs diretos para alteração de Data de Vencimento (`dueDate`) e Valor (`amountCents`) de cada parcela/duplicata antes de efetivar a importação.
+  - Inputs diretos para alteração de Data de Vencimento (`dueDate`) e Valor (`amountCents`) de cada parcela/duplicata antes de efetivar a importação com cabeçalhos acessíveis fixos (`sticky`) e regiões com teclado (`tabindex="0"`).
 - **Painel de Batimento em Tempo Real & Ajustes Comerciais (Acréscimos e Abatimentos):**
   - Cálculo instantâneo: $\text{Diferença} = \text{Soma das Parcelas} - \text{Total da NF-e}$.
   - Se houver divergência, o sistema exibe o painel de batimento sem bloquear a importação, permitindo selecionar o motivo comercial da diferença:
-    - **Diferença Positiva (+ Acréscimo / Boleto Maior):**
-      - 🚚 Frete por Fora / Despesa de Entrega
-      - 📈 Juros / Encargos / Tarifa Bancária de Boleto
-      - ➕ Outro Acréscimo Comercial
-      - Gravado no campo `interestCents` e registrado no histórico/observações.
-    - **Diferença Negativa (- Abatimento / Boleto Menor):**
-      - 🛡️ Crédito de Garantia / Peça com Defeito
-      - 🏷️ Desconto Comercial no Boleto
-      - 🔄 Devolução Parcial de Mercadoria
-      - ➖ Outro Abatimento
-      - Gravado no campo `discountCents` e registrado no histórico/observações.
+    - **Diferença Positiva (+ Acréscimo / Boleto Maior):** Frete por Fora / Despesa de Entrega, Juros / Encargos / Tarifa Bancária de Boleto ou Outro Acréscimo Comercial (gravado em `interestCents` e no histórico/observações).
+    - **Diferença Negativa (- Abatimento / Boleto Menor):** Crédito de Garantia / Peça com Defeito, Desconto Comercial no Boleto, Devolução Parcial de Mercadoria ou Outro Abatimento (gravado em `discountCents` e no histórico/observações).
 - **Importação em Massa (Multi-XML):**
-  - Suporte a seleção ou arraste de múltiplos arquivos XML simultâneos (`multiple`), processamento assíncrono em fila e agrupamento em tabela consolidada de notas com status, conferência e botão de importação em lote (`[ Importar Todos ]`).
+  - Suporte a seleção ou arraste de múltiplos arquivos XML simultâneos (`multiple`), processamento assíncrono em fila e tabela consolidada de resumo com status, conferência, inspeção e botão de importação em lote (`[ Importar Todas as Notas (X) ]`).
+- **Validação:** 124 testes passando no Vitest (100% verde em 16 arquivos), 0 erros de TypeScript (`npm run lint`).
 
 ### 📋 Etapa 11.2: Modularização das Telas Restantes
 Decomposição arquitetural para modularizar e reduzir para menos de 250 linhas os componentes remanescentes:

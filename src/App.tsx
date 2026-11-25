@@ -1552,6 +1552,8 @@ export default function App() {
           userId={user.id}
           categories={categories}
           contacts={contacts}
+          companies={companies}
+          selectedCompanyId={selectedCompanyId}
           existingTransactions={transactions}
           onClose={() => setXmlModalOpen(false)}
           onImport={handleSaveTransactionBatch}
