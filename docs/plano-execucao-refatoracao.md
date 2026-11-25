@@ -23,7 +23,7 @@ Transformar o **FluxoClaro** em um sistema financeiro modular, de fácil manuten
 [✅ Fase 8: Excel Modular]    -> Importação Excel com Drag-and-Drop nativo e Decomposição (< 200 linhas)
 [✅ Fase 9: Multi-Empresas]   -> Concluída com Sucesso (9.1, 9.2 e 9.3: Entidades, RBAC, CNPJ Alfanumérico, Trava Anti-Fraude e Modais)
 [✅ Fase 10: Central & Licença]-> Concluída com Sucesso (10.1 Central de Atualizações e Auto-Update; 10.2 Sistema de Licenciamento e Liberação)
-[📋 Fase 11: Telas Restantes] -> Modularização de Contatos, Configurações, Relatórios e Renegociação
+[⏳ Fase 11: XML & Telas]     -> 11.1 Evolução do XML (Lote, Validação e Edição); 11.2 Modularização das Telas Restantes
 [📋 Fase 12: Auditoria UI]    -> Pente fino de padronização em 100% dos botões, inputs, pills e drawers
 ```
 
@@ -275,13 +275,28 @@ Implementar governança de versões, eliminação de problemas de cache do PWA n
 
 ---
 
-## 📋 FASE 11: Modularização das Telas Restantes
+## 📋 FASE 11: Evolução da Central de XML & Modularização das Telas Restantes
 
-Decomposição dos componentes restantes que ainda excedem 500 linhas:
-- `ContactsView.tsx` (567 linhas) e `ContactDrawer.tsx` (559 linhas).
-- `SettingsView.tsx` (809 linhas).
-- `ReportsView.tsx` (530 linhas).
-- `InstallmentManagerModal.tsx` (700 linhas).
+### 📋 Etapa 11.1: Evolução do Importador XML (Layout Compacto, Validação Fiscal, Edição Inline e Multi-XML em Massa)
+- **Compactação de Layout pós-upload:**
+  - A caixa de dropzone grande recolhe-se automaticamente após o carregamento para uma barra horizontal compacta de 1 linha (`📄 NF-e ... • Arquivo ... [ 🔄 Trocar ]`), liberando ~150px de altura para visualização completa sem rolagem.
+- **Card Explícito de Validação Fiscal & Vínculo Multi-Empresas:**
+  - Cruzamento de CNPJs do XML com as empresas do usuário (`companies`):
+    - Se Destinatário = Empresa do usuário: auto-seleção de **`Conta a Pagar`**, vinculação do `companyId` e identificação do Emitente como Fornecedor.
+    - Se Emitente = Empresa do usuário: auto-seleção de **`Conta a Receber`**, vinculação do `companyId` e identificação do Destinatário como Cliente.
+    - Se nenhum coincidir: card informativo com seletor de empresa e seleção explícita da operação.
+  - Vínculo persistido do `company_id` nos lançamentos importados.
+- **Edição Direta de Parcelas na Tabela de Pré-visualização:**
+  - Possibilidade de editar a Data de Vencimento e o Valor de cada duplicata/parcela diretamente na tabela antes da confirmação da importação.
+- **Importação em Massa (Multi-XML):**
+  - Suporte a seleção ou arraste de múltiplos arquivos XML simultâneos com leitura em fila e agrupamento em tabela consolidada para importação do lote com 1 clique.
+
+### 📋 Etapa 11.2: Modularização das Telas Restantes
+Decomposição arquitetural para modularizar e reduzir para menos de 250 linhas os componentes remanescentes:
+- `ContactsView.tsx` (567 linhas) e `ContactDrawer.tsx` (559 linhas) -> `src/components/contacts/`
+- `SettingsView.tsx` (809 linhas) -> `src/components/settings/`
+- `ReportsView.tsx` (530 linhas) -> `src/components/reports/`
+- `InstallmentManagerModal.tsx` (700 linhas) -> `src/components/installment-manager/`
 
 ---
 
