@@ -298,7 +298,9 @@ Implementar governança de versões, eliminação de problemas de cache do PWA n
     - **Diferença Negativa (- Abatimento / Boleto Menor):** Crédito de Garantia / Peça com Defeito, Desconto Comercial no Boleto, Devolução Parcial de Mercadoria ou Outro Abatimento (gravado em `discountCents` e no histórico/observações).
 - **Importação em Massa (Multi-XML):**
   - Suporte a seleção ou arraste de múltiplos arquivos XML simultâneos (`multiple`), processamento assíncrono em fila e tabela consolidada de resumo com status, conferência, inspeção e botão de importação em lote (`[ Importar Todas as Notas (X) ]`).
-- **Validação:** 124 testes passando no Vitest (100% verde em 16 arquivos), 0 erros de TypeScript (`npm run lint`).
+- **Validação:** 125 testes passando no Vitest (100% verde em 16 arquivos), 0 erros de TypeScript (`npm run lint`).
+- **Refinamento Visual Registrado (Modal Clean):**
+  - Como a empresa vinculada já aparece na pílula superior (`Vinculado à empresa: GENUINA`), eliminar o card redundante de "Sua Empresa" e exibir apenas o card compacto do Fornecedor (ou Cliente) com seu botão de cadastro, tornando o layout mais *clean* e liberando mais espaço vertical.
 
 ### 📋 Etapa 11.2: Modularização das Telas Restantes
 Decomposição arquitetural para modularizar e reduzir para menos de 250 linhas os componentes remanescentes:
