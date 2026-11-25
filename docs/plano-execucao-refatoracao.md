@@ -280,11 +280,14 @@ Implementar governança de versões, eliminação de problemas de cache do PWA n
 ### ✅ Etapa 11.1: Concluída com Sucesso (Evolução do Importador XML, Layout Compacto, Validação Fiscal, Edição Inline, Batimento com Ajustes Comerciais e Multi-XML)
 - **Compactação de Layout pós-upload:**
   - A caixa de dropzone grande recolhe-se automaticamente após o carregamento para uma barra horizontal compacta de 1 linha (`📄 NF-e ... • Arquivo ... [ 🔄 Trocar XML ]`), liberando ~150px de altura vertical para visualização completa das parcelas sem rolagem excessiva.
-- **Card Explícito de Validação Fiscal & Vínculo Multi-Empresas:**
+- **Card Explícito de Validação Fiscal & Integridade Estrita de Dois Agentes:**
   - Cruzamento inteligente dos CNPJs do XML com as empresas cadastradas do usuário (`companies`):
-    - Se Destinatário = Empresa do usuário: auto-seleção imediata de **`Conta a Pagar (Compra / Despesa)`**, vinculação automática do `companyId` da empresa compradora e identificação do Emitente como Fornecedor.
-    - Se Emitente = Empresa do usuário: auto-seleção de **`Conta a Receber (Venda / Receita)`**, vinculação automática do `companyId` da empresa emitente e identificação do Destinatário como Cliente.
-    - Se nenhum CNPJ coincidir: exibição de **Card de Alerta com Trava de Segurança** destacando *"Atenção: Nem o Emitente nem o Destinatário correspondem a uma empresa cadastrada"*, com dropdown para vincular à empresa correta e seleção manual da operação, além de atalho direto para cadastro rápido de Fornecedor/Cliente sem perder os dados da nota.
+    - Se Destinatário = Empresa do usuário: auto-seleção imediata de **`Conta a Pagar (Compra / Despesa)`**, vinculação automática do `companyId` da empresa compradora, identificação do Emitente como Fornecedor e atalho rápido para cadastrar apenas o **Fornecedor** em Contatos.
+    - Se Emitente = Empresa do usuário: auto-seleção de **`Conta a Receber (Venda / Receita)`**, vinculação automática do `companyId` da empresa emitente, identificação do Destinatário como Cliente e atalho rápido para cadastrar apenas o **Cliente** em Contatos.
+    - **Trava Fidedigna de Integridade (Nenhum CNPJ Coincide):**
+      - Uma nota fiscal só pode pertencer ao Emitente ou ao Destinatário (dois agentes legais). Fica terminantemente proibido vincular a nota a um 3º CNPJ arbitrário via dropdown solto.
+      - O botão **`[ Importar ]` fica estritamente bloqueado** e o sistema exibe alerta claro orientando o usuário a cadastrar sua empresa primeiro: `[ 🏢 Ir para Minhas Empresas ]` ou `[ Cancelar ]`.
+  - **Correção Visual de Layout:** Aplicação de `min-w-0` e contenção de overflow nos cards de Emitente e Destinatário, impedindo qualquer vazamento horizontal da tabela ou modais.
   - Vínculo persistido do `company_id` nos lançamentos importados.
 - **Edição Direta de Parcelas na Tabela de Pré-visualização (Inline Editing):**
   - Inputs diretos para alteração de Data de Vencimento (`dueDate`) e Valor (`amountCents`) de cada parcela/duplicata antes de efetivar a importação com cabeçalhos acessíveis fixos (`sticky`) e regiões com teclado (`tabindex="0"`).
