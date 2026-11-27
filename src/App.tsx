@@ -134,6 +134,8 @@ export default function App() {
   const [settingsInitialTab, setSettingsInitialTab] = useState<'companies' | 'general'>('companies');
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthKey);
   const [txInitialFilter, setTxInitialFilter] = useState<string>('all');
+  const [txInitialTypeFilter, setTxInitialTypeFilter] = useState<'all' | 'payable' | 'receivable'>('all');
+  const [txFilterTriggerKey, setTxFilterTriggerKey] = useState<number>(0);
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -892,7 +894,11 @@ export default function App() {
                 title={sidebarCollapsed ? item.label : undefined}
                 aria-label={item.label}
                 onClick={() => {
-                  if (item.id === 'transactions') setTxInitialFilter('all');
+                  if (item.id === 'transactions') {
+                    setTxInitialFilter('all');
+                    setTxInitialTypeFilter('all');
+                    setTxFilterTriggerKey((k) => k + 1);
+                  }
                   setActiveView(item.id);
                 }}
                 className={`w-full flex items-center ${
@@ -1115,6 +1121,8 @@ export default function App() {
               onQuickSettle={handleToggleSettle}
               onNavigateToTransactions={(filter) => {
                 setTxInitialFilter(filter || 'all');
+                setTxInitialTypeFilter('all');
+                setTxFilterTriggerKey((k) => k + 1);
                 setActiveView('transactions');
               }}
               onOpenSettings={() => setActiveView('settings')}
@@ -1250,6 +1258,8 @@ export default function App() {
                   }}
                   onNavigateToTransactions={(filter) => {
                     setTxInitialFilter(filter || 'all');
+                    setTxInitialTypeFilter('all');
+                    setTxFilterTriggerKey((k) => k + 1);
                     setActiveView('transactions');
                   }}
                   onOpenAnalytics={() => setActiveView('analytics')}
@@ -1260,6 +1270,8 @@ export default function App() {
                 <TransactionsView
                   selectedMonth={selectedMonth}
                   initialFilter={txInitialFilter}
+                  initialTypeFilter={txInitialTypeFilter}
+                  filterTriggerKey={txFilterTriggerKey}
                   transactions={transactions}
                   categories={categories}
                   contacts={contacts}
@@ -1499,6 +1511,12 @@ export default function App() {
         companies={companies}
         onQuickSettle={handleToggleSettle}
         onOpenConsult={(tx) => setConsultingTx(tx)}
+        onNavigateToTransactions={({ statusFilter, typeFilter }) => {
+          setTxInitialFilter(statusFilter || 'all');
+          setTxInitialTypeFilter(typeFilter || 'all');
+          setTxFilterTriggerKey((k) => k + 1);
+          setActiveView('transactions');
+        }}
       />
 
       {txModalOpen && (

@@ -91,13 +91,20 @@ describe('XmlImport Modular Subcomponents (v1.11.0)', () => {
     expect(handleClear).toHaveBeenCalledTimes(1);
   });
 
-  it('XmlFiscalValidationCard enforces overflow-safe layout, Buyer/Seller badges, and Strict Two-Agent Security Lock without arbitrary dropdown', () => {
+  it('XmlFiscalValidationCard renders Ultra-Clean single Counterparty card, discreet bound badge, and Strict Two-Agent Security Lock', () => {
     const purchaseNfe = analyzeXmlDocument(`
       <NFe>
         <infNFe>
           <ide><nNF>777</nNF><tpNF>1</tpNF><dhEmi>2026-11-25</dhEmi></ide>
-          <emit><CNPJ>12345678000195</CNPJ><xNome>PECAS BRASIL DISTRIBUIDORA NACIONAL LTDA</xNome></emit>
-          <dest><CNPJ>98765432000188</CNPJ><xNome>GENUINA COMERCIAL LINENSE DE PECAS AUTOMOTIVAS LTDA 00193108</xNome></dest>
+          <emit>
+            <CNPJ>12345678000195</CNPJ>
+            <xNome>PECAS BRASIL DISTRIBUIDORA NACIONAL LTDA</xNome>
+            <enderEmit><xMun>São Paulo</xMun><UF>SP</UF></enderEmit>
+          </emit>
+          <dest>
+            <CNPJ>98765432000188</CNPJ>
+            <xNome>GENUINA COMERCIAL LINENSE DE PECAS AUTOMOTIVAS LTDA 00193108</xNome>
+          </dest>
           <total><ICMSTot><vNF>400.00</vNF></ICMSTot></total>
         </infNFe>
       </NFe>
@@ -121,28 +128,50 @@ describe('XmlImport Modular Subcomponents (v1.11.0)', () => {
       />
     );
 
-    // 1. Overflow-safe classes on both cards & NO third-party company select dropdown
-    expect(screen.getByTestId('xml-issuer-card').className).toContain('min-w-0');
-    expect(screen.getByTestId('xml-issuer-card').className).toContain('overflow-hidden');
-    expect(screen.getByTestId('xml-recipient-card').className).toContain('min-w-0');
-    expect(screen.getByTestId('xml-recipient-card').className).toContain('overflow-hidden');
+    // 1. Ultra-clean: Top company pill + ONLY single Counterparty card (no redundant "Your Company" box or dropdown)
+    expect(screen.getByTestId('xml-matched-company-pill')).toHaveTextContent(
+      /Vinculado à empresa: Genuína/i
+    );
+    const counterpartyCard = screen.getByTestId('xml-counterparty-card');
+    expect(counterpartyCard.className).toContain('min-w-0');
+    expect(counterpartyCard.className).toContain('overflow-hidden');
+    expect(counterpartyCard).toHaveTextContent('PECAS BRASIL DISTRIBUIDORA NACIONAL LTDA');
+    expect(counterpartyCard).toHaveTextContent('São Paulo/SP');
     expect(screen.queryByTestId('xml-company-select')).not.toBeInTheDocument();
 
-    // 2. Recipient is our company -> Buyer badge + ONLY [+ Cadastrar Fornecedor] on Issuer
-    expect(screen.getByTestId('xml-badge-own-buyer')).toHaveTextContent('🏢 Sua Empresa (Compradora)');
+    // 2. Purchase -> [+ Cadastrar Fornecedor] button; when bound -> discreet `✓ Vinculado aos Contatos`
     expect(screen.getByTestId('xml-register-supplier-btn')).toHaveTextContent('+ Cadastrar Fornecedor');
     expect(screen.queryByTestId('xml-register-customer-btn')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('xml-register-supplier-btn'));
     expect(onOpenModal).toHaveBeenCalledTimes(1);
 
-    // 3. Sale scenario: Issuer is our company -> Seller badge + ONLY [+ Cadastrar Cliente] on Recipient
+    rerender(
+      <XmlFiscalValidationCard
+        analysis={purchaseNfe}
+        detection={buyerDetection}
+        companies={[mockCompany]}
+        txType={buyerDetection.txType}
+        isContactBound={true}
+        boundContactName="PECAS BRASIL"
+        isCreatingContact={false}
+        onAutoCreateContact={vi.fn()}
+        onOpenContactModal={onOpenModal}
+      />
+    );
+    expect(screen.getByTestId('xml-contact-bound-badge')).toHaveTextContent('✓ Vinculado aos Contatos');
+
+    // 3. Sale scenario: Issuer is our company -> Counterparty card shows Customer + [+ Cadastrar Cliente]
     const saleNfe = analyzeXmlDocument(`
       <NFe>
         <infNFe>
           <ide><nNF>778</nNF><tpNF>1</tpNF><dhEmi>2026-11-25</dhEmi></ide>
           <emit><CNPJ>98765432000188</CNPJ><xNome>GENUINA COMERCIAL LINENSE DE PECAS AUTOMOTIVAS LTDA 00193108</xNome></emit>
-          <dest><CNPJ>44555666000177</CNPJ><xNome>AUTO ELETRICA CLIENTE LTDA</xNome></dest>
+          <dest>
+            <CNPJ>44555666000177</CNPJ>
+            <xNome>AUTO ELETRICA CLIENTE LTDA</xNome>
+            <enderDest><xMun>Lins</xMun><UF>SP</UF></enderDest>
+          </dest>
           <total><ICMSTot><vNF>850.00</vNF></ICMSTot></total>
         </infNFe>
       </NFe>
@@ -163,7 +192,8 @@ describe('XmlImport Modular Subcomponents (v1.11.0)', () => {
       />
     );
 
-    expect(screen.getByTestId('xml-badge-own-seller')).toHaveTextContent('🏢 Sua Empresa (Vendedora)');
+    expect(screen.getByTestId('xml-counterparty-card')).toHaveTextContent('AUTO ELETRICA CLIENTE LTDA');
+    expect(screen.getByTestId('xml-counterparty-card')).toHaveTextContent('Lins/SP');
     expect(screen.getByTestId('xml-register-customer-btn')).toHaveTextContent('+ Cadastrar Cliente');
     expect(screen.queryByTestId('xml-register-supplier-btn')).not.toBeInTheDocument();
 

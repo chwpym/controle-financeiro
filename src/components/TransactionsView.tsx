@@ -11,6 +11,8 @@ import { Modal } from './ui/Modal';
 interface TransactionsViewProps {
   selectedMonth: string;
   initialFilter?: string;
+  initialTypeFilter?: 'all' | 'payable' | 'receivable';
+  filterTriggerKey?: number;
   transactions: Transaction[];
   categories: Category[];
   contacts: Contact[];
@@ -33,6 +35,8 @@ interface TransactionsViewProps {
 export const TransactionsView: React.FC<TransactionsViewProps> = ({
   selectedMonth,
   initialFilter = 'all',
+  initialTypeFilter = 'all',
+  filterTriggerKey = 0,
   transactions,
   categories,
   contacts,
@@ -54,8 +58,15 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   const [dateFilter, setDateFilter] = useState<DateFilterValue>(() =>
     createDateFilterState(selectedMonth, 'month')
   );
-  const [typeFilter, setTypeFilter] = useState<'all' | 'payable' | 'receivable'>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'payable' | 'receivable'>(initialTypeFilter);
   const [statusFilter, setStatusFilter] = useState<string>(initialFilter);
+
+  // Sync external navigation filters (e.g. from Executive AlertsDrawer) even when already on TransactionsView
+  // Sincroniza filtros disparados externamente (ex: Central de Avisos Executiva)
+  React.useEffect(() => {
+    setStatusFilter(initialFilter);
+    setTypeFilter(initialTypeFilter);
+  }, [initialFilter, initialTypeFilter, filterTriggerKey]);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [contactFilter, setContactFilter] = useState<string>('all');
   const [search, setSearch] = useState('');

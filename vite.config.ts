@@ -234,9 +234,10 @@ export default defineConfig(({ mode }) => {
       environment: 'jsdom',
       setupFiles: './src/setupTests.ts',
       pool: 'forks',
-      // Limita workers simultâneos no Windows para evitar timeout de inicialização de processos forks
-      // Limits concurrent fork workers on Windows to prevent worker startup timeouts under heavy load
+      // EN: Limits concurrent fork workers on Windows and raises testTimeout to prevent 5000ms timeouts under heavy CPU load.
+      // PT: Limita workers simultâneos no Windows e amplia o testTimeout para evitar timeouts de 5000ms sob carga.
       maxWorkers: 2,
+      testTimeout: 20000,
     },
   };
 });

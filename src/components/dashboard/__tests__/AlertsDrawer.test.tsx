@@ -1,3 +1,8 @@
+/**
+ * EN: Unit & integration tests for AlertsDrawer (Executive Summary + Detailed List modes).
+ * PT: Testes unitários e de integração da Central de Avisos (Modos Resumo Executivo e Lista Detalhada).
+ */
+
 import { fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -143,7 +148,6 @@ const mockAlerts: Transaction[] = [
 
 describe('AlertsDrawer', () => {
   beforeEach(() => {
-    // Freeze "today" so due-date buckets are deterministic regardless of the real date
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(`${mockToday}T12:00:00`));
   });
@@ -152,9 +156,10 @@ describe('AlertsDrawer', () => {
     vi.useRealTimers();
   });
 
-  it('renders drawer with alert list, filter counts and allows closing', () => {
+  it('opens in Executive Summary mode by default with consolidated topics and triggers filtered navigation', () => {
     const onClose = vi.fn();
     const onQuickSettle = vi.fn();
+    const onNavigate = vi.fn();
 
     render(
       <AlertsDrawer
@@ -164,20 +169,31 @@ describe('AlertsDrawer', () => {
         contacts={mockContacts}
         companies={mockCompanies}
         onQuickSettle={onQuickSettle}
+        onNavigateToTransactions={onNavigate}
       />
     );
 
     expect(screen.getByTestId('alerts-drawer')).toBeInTheDocument();
-    expect(screen.getByText('Fornecedor Atrasado')).toBeInTheDocument();
-    expect(screen.getByText('Internet Fibra Vence Hoje')).toBeInTheDocument();
-    expect(screen.getByText('Fatura Cliente a Receber')).toBeInTheDocument();
+    expect(screen.getByTestId('alerts-executive-summary')).toBeInTheDocument();
 
-    // Close on X
-    fireEvent.click(screen.getByTestId('alerts-drawer-close'));
+    // Consolidated topics with totals
+    expect(screen.getByTestId('exec-topic-overdue-payables')).toHaveTextContent('Contas a Pagar Vencidas');
+    expect(screen.getByTestId('exec-topic-overdue-payables')).toHaveTextContent(/R\$\s*500,00/);
+
+    expect(screen.getByTestId('exec-topic-today')).toHaveTextContent('Contas a Vencer Hoje');
+    expect(screen.getByTestId('exec-topic-today')).toHaveTextContent(/R\$\s*150,00/);
+
+    expect(screen.getByTestId('exec-topic-3days')).toHaveTextContent('Contas a Vencer nos Próximos 3 Dias');
+    expect(screen.getByTestId('exec-topic-receivables')).toHaveTextContent('Contas a Receber Pendentes');
+    expect(screen.getByTestId('exec-topic-receivables')).toHaveTextContent(/R\$\s*2\.000,00/);
+
+    // Clicking action button closes drawer and filters corresponding view
+    fireEvent.click(screen.getByTestId('exec-btn-overdue-payables'));
     expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onNavigate).toHaveBeenCalledWith({ statusFilter: 'overdue', typeFilter: 'payable' });
   });
 
-  it('filters by overdue and triggers quick settlement', () => {
+  it('switches to Detailed List mode, filters by overdue, and triggers quick settlement', () => {
     const onClose = vi.fn();
     const onQuickSettle = vi.fn();
 
@@ -192,7 +208,14 @@ describe('AlertsDrawer', () => {
       />
     );
 
-    // Click Vencidas filter
+    // Switch segmented control to [ 📄 Lista Detalhada ]
+    fireEvent.click(screen.getByTestId('alerts-mode-detailed'));
+
+    expect(screen.getByText('Fornecedor Atrasado')).toBeInTheDocument();
+    expect(screen.getByText('Internet Fibra Vence Hoje')).toBeInTheDocument();
+    expect(screen.getByText('Fatura Cliente a Receber')).toBeInTheDocument();
+
+    // Filter by Vencidas
     fireEvent.click(screen.getByTestId('alerts-filter-overdue'));
 
     expect(screen.getByText('Fornecedor Atrasado')).toBeInTheDocument();
@@ -202,5 +225,9 @@ describe('AlertsDrawer', () => {
     // Trigger quick settle on the overdue item
     fireEvent.click(screen.getByTestId('quick-settle-tx-overdue'));
     expect(onQuickSettle).toHaveBeenCalledWith(mockAlerts[0]);
+
+    // Close on X
+    fireEvent.click(screen.getByTestId('alerts-drawer-close'));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
