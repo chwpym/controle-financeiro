@@ -1,17 +1,33 @@
 /**
- * EN: Inline-Editable Installments Table & Real-Time Reconciliation Panel (Phase 11.1).
- *     Allows direct inline editing of each installment's Due Date (`dueDate`) and Amount in BRL
- *     (`amountCents`), displays real-time comparison (`Total da NF-e` vs `Soma das Parcelas`),
- *     never blocks the user on divergence, and records commercial adjustments (+ additions in
- *     `interestCents` / - deductions in `discountCents` + reason notes).
- * PT: Tabela de Parcelas com Edição Direta (Inline) e Painel de Batimento em Tempo Real (Fase 11.1).
- *     Permite editar diretamente o Vencimento (`dueDate`) e o Valor em Reais (`amountCents`) de cada
- *     duplicata, confronta `Total da NF-e` vs `Soma das Parcelas` em centavos inteiros e disponibiliza
- *     o seletor de ajustes comerciais (+ Acréscimo / - Abatimento) sem nunca bloquear o usuário.
+ * EN: Inline-Editable Installments Table, Flexible Installment Builder & Real-Time Reconciliation (Phase 11.1.2).
+ *     - Direct inline editing of Due Date (`dueDate`) and Amount in BRL (`amountCents`).
+ *     - Flexible Installment Controls (`Solução A`):
+ *       1. `[ + Adicionar Parcela ]`: appends a new installment row with the remaining balance needed to
+ *          match the NF total (or equal fallback) and due date `+30 days` from the previous row.
+ *       2. `[ 쪼 Parcelar em: 2x | 3x | 4x | 6x ]`: divides the invoice total into exact equal cents
+ *          installments in 1 click using `Math.floor` + remainder on the 1st installment.
+ *       3. `[ ✕ ]` remove button on manually added installment rows (`isManualAdded`).
+ *     - Real-Time Reconciliation & Commercial Adjustments panel (+ additions / - deductions).
+ * PT: Tabela de Parcelas Inline, Parcelamento Flexível e Batimento em Tempo Real (Etapa 11.1.2).
+ *     - Edição inline de Vencimento (`dueDate`) e Valor em R$ (`amountCents`).
+ *     - Controles de Parcelamento Flexível (`Solução A`):
+ *       1. `[ + Adicionar Parcela ]`: cria nova parcela com o saldo restante da NF e vencimento +30 dias.
+ *       2. `[ 쪼 Parcelar em: 2x | 3x | 4x | 6x ]`: divide o total da NF em parcelas exatas com 1 clique.
+ *       3. `[ ✕ ]`: remove parcelas avulsas adicionadas manualmente.
+ *     - Painel de Batimento em Tempo Real com Ajustes Comerciais.
  */
 
 import React, { useState } from 'react';
-import { AlertTriangle, CheckCircle2, Scale, TrendingDown, TrendingUp } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Layers,
+  Plus,
+  Scale,
+  TrendingDown,
+  TrendingUp,
+  X,
+} from 'lucide-react';
 import { formatBRL, formatDateBR, formatInputBRL, parseBRLToCents } from '../../utils/format';
 import {
   NEGATIVE_ADJUSTMENT_REASONS,
@@ -30,6 +46,9 @@ export interface XmlPreviewTableProps {
     id: string,
     patch: Partial<Pick<ParsedXmlPreviewItem, 'dueDate' | 'amountCents' | 'description'>>
   ) => void;
+  onAddInstallment?: () => void;
+  onSplitInstallments?: (count: number) => void;
+  onRemoveInstallment?: (id: string) => void;
   invoiceTotalCents?: number;
   installmentsTotalCents?: number;
   divergenceCents?: number;
@@ -40,12 +59,8 @@ export interface XmlPreviewTableProps {
   onChangeAdjustmentNotes?: (notes: string) => void;
 }
 
-/**
- * EN: Controlled inline BRL currency cell that lets users type freely (e.g. "285,50")
- *     while syncing integer cents on every valid edit and formatting cleanly on blur.
- * PT: Célula controlada de valor BRL que permite digitação fluida (ex: "285,50")
- *     sincronizando centavos inteiros imediatamente e formatando ao sair do campo (`blur`).
- */
+const QUICK_SPLIT_COUNTS = [2, 3, 4, 6] as const;
+
 const InlineMoneyCell: React.FC<{
   tempId: string;
   amountCents: number;
@@ -53,7 +68,6 @@ const InlineMoneyCell: React.FC<{
   onChangeCents?: (cents: number) => void;
 }> = ({ tempId, amountCents, disabled, onChangeCents }) => {
   const [draft, setDraft] = useState<string | null>(null);
-
   const displayed = draft !== null ? draft : formatInputBRL(amountCents);
 
   if (!onChangeCents) {
@@ -97,6 +111,9 @@ export const XmlPreviewTable: React.FC<XmlPreviewTableProps> = ({
   onToggleItem,
   onUncheckDuplicates,
   onUpdateItem,
+  onAddInstallment,
+  onSplitInstallments,
+  onRemoveInstallment,
   invoiceTotalCents,
   installmentsTotalCents,
   divergenceCents: propDivergenceCents,
@@ -129,6 +146,8 @@ export const XmlPreviewTable: React.FC<XmlPreviewTableProps> = ({
   const reasonOptions =
     adjustmentType === 'positive' ? POSITIVE_ADJUSTMENT_REASONS : NEGATIVE_ADJUSTMENT_REASONS;
 
+  const hasManualItems = items.some((it) => it.isManualAdded);
+
   return (
     <div className="space-y-3">
       {/* Duplicate Warning Banner / Alerta de Possível Duplicidade */}
@@ -150,14 +169,56 @@ export const XmlPreviewTable: React.FC<XmlPreviewTableProps> = ({
         </div>
       )}
 
-      {/* Header Counter */}
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-medium text-slate-600 dark:text-slate-300">
-        <span>
-          {selectedItems.length} de {items.length} item(ns) selecionado(s)
-        </span>
-        <span className="font-mono-tabular font-semibold">
-          Total selecionado: {formatBRL(computedInstallmentsCents)}
-        </span>
+      {/* Header Toolbar: Selected Counter + Flexible Installment Actions (Solução A) */}
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="flex flex-wrap items-center gap-2 font-medium text-slate-600 dark:text-slate-300">
+          <span>
+            {selectedItems.length} de {items.length} item(ns) selecionado(s)
+          </span>
+          <span className="text-slate-300 dark:text-slate-700">·</span>
+          <span className="font-mono-tabular font-semibold">
+            Total selecionado: {formatBRL(computedInstallmentsCents)}
+          </span>
+        </div>
+
+        {(onSplitInstallments || onAddInstallment) && items.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {onSplitInstallments && (
+              <div
+                className="inline-flex items-center gap-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-2 py-1"
+                data-testid="xml-quick-split-bar"
+              >
+                <Layers className="w-3.5 h-3.5 text-teal-700 dark:text-teal-400 shrink-0" />
+                <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 mr-0.5">
+                  Parcelar em:
+                </span>
+                {QUICK_SPLIT_COUNTS.map((cnt) => (
+                  <button
+                    key={cnt}
+                    type="button"
+                    data-testid={`xml-split-${cnt}x-btn`}
+                    onClick={() => onSplitInstallments(cnt)}
+                    className="px-2 py-0.5 rounded-md text-[11px] font-bold font-mono-tabular bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-teal-600 hover:text-teal-700 dark:hover:text-teal-300 transition-colors cursor-pointer"
+                  >
+                    {cnt}x
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {onAddInstallment && (
+              <button
+                type="button"
+                onClick={onAddInstallment}
+                data-testid="xml-add-installment-btn"
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-teal-600/40 dark:border-teal-500/40 bg-teal-50/80 dark:bg-teal-950/40 text-teal-800 dark:text-teal-300 text-[11px] font-semibold hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ Adicionar Parcela</span>
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Responsive Semantic Table with Sticky Header & Inline Inputs */}
@@ -179,6 +240,9 @@ export const XmlPreviewTable: React.FC<XmlPreviewTableProps> = ({
                 <th className="py-2.5 px-2">Parcela / Documento</th>
                 <th className="py-2.5 px-2 w-36">Vencimento</th>
                 <th className="py-2.5 pl-2 pr-3 text-right w-36">Valor (R$)</th>
+                {hasManualItems && onRemoveInstallment && (
+                  <th className="py-2.5 pr-3 w-8 text-right" aria-label="Remover parcela" />
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -223,6 +287,11 @@ export const XmlPreviewTable: React.FC<XmlPreviewTableProps> = ({
                             · Emissão {formatDateBR(item.issueDate)}
                           </span>
                         )}
+                        {item.isManualAdded && (
+                          <span className="text-indigo-600 dark:text-indigo-400 font-sans font-semibold">
+                            · Avulsa
+                          </span>
+                        )}
                         {isDup && (
                           <span className="text-amber-700 dark:text-amber-400 font-sans font-semibold">
                             · Possível duplicata
@@ -263,6 +332,23 @@ export const XmlPreviewTable: React.FC<XmlPreviewTableProps> = ({
                         />
                       </div>
                     </td>
+
+                    {hasManualItems && onRemoveInstallment && (
+                      <td className="py-2 pr-3 align-middle text-right">
+                        {item.isManualAdded && (
+                          <button
+                            type="button"
+                            onClick={() => onRemoveInstallment(item.tempId)}
+                            aria-label={`Remover parcela avulsa ${item.installmentNumber}`}
+                            data-testid={`xml-remove-installment-${item.tempId}`}
+                            title="Remover parcela avulsa"
+                            className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -283,7 +369,6 @@ export const XmlPreviewTable: React.FC<XmlPreviewTableProps> = ({
                 : 'border-amber-200 dark:border-amber-800/70 bg-amber-50/50 dark:bg-amber-950/25'
           }`}
         >
-          {/* Comparison Summary Bar */}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
               <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
@@ -301,7 +386,6 @@ export const XmlPreviewTable: React.FC<XmlPreviewTableProps> = ({
               </div>
             </div>
 
-            {/* Status Badge */}
             {adjustmentType === 'exact' ? (
               <span
                 data-testid="xml-reconciliation-exact-badge"
@@ -329,7 +413,6 @@ export const XmlPreviewTable: React.FC<XmlPreviewTableProps> = ({
             )}
           </div>
 
-          {/* Commercial Adjustment Reason & Notes (Never blocks the user) */}
           {adjustmentType !== 'exact' && (
             <div className="pt-2 border-t border-slate-200/80 dark:border-slate-700/70 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <div>

@@ -109,11 +109,15 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = (props) => {
     adjustmentNotes,
     setAdjustmentNotes,
     isBlockedByFiscalLock,
+    isMissingMandatoryFields,
 
     handleFileChange,
     handleTypeChange,
     toggleItem,
     updateInstallmentItem,
+    handleAddInstallment,
+    handleSplitInstallments,
+    handleRemoveInstallment,
     handleAutoCreateContact,
     handleCustomContactSaved,
     handleConfirmImport,
@@ -465,6 +469,7 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = (props) => {
                       contacts={contacts}
                       contactId={contactId}
                       onChangeContact={setContactId}
+                      showValidationHint
                     />
 
                     <XmlPreviewTable
@@ -474,6 +479,9 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = (props) => {
                       onToggleItem={toggleItem}
                       onUncheckDuplicates={() => setExcludedIds(new Set(duplicateIds))}
                       onUpdateItem={updateInstallmentItem}
+                      onAddInstallment={handleAddInstallment}
+                      onSplitInstallments={handleSplitInstallments}
+                      onRemoveInstallment={handleRemoveInstallment}
                       invoiceTotalCents={invoiceTotalCents}
                       installmentsTotalCents={installmentsTotalCents}
                       divergenceCents={divergenceCents}
@@ -517,7 +525,7 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = (props) => {
                   {viewMode === 'single' && (
                     <button
                       type="button"
-                      disabled={validSingleCount === 0 || isBlockedByFiscalLock}
+                      disabled={validSingleCount === 0 || isBlockedByFiscalLock || isMissingMandatoryFields}
                       onClick={handleConfirmImport}
                       className="px-4 py-2 rounded-xl border border-teal-600 text-teal-800 dark:text-teal-300 text-sm font-semibold hover:bg-teal-50 dark:hover:bg-teal-950/40 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[42px] cursor-pointer"
                     >
@@ -537,7 +545,7 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = (props) => {
               ) : (
                 <button
                   type="button"
-                  disabled={validSingleCount === 0 || isBlockedByFiscalLock}
+                  disabled={validSingleCount === 0 || isBlockedByFiscalLock || isMissingMandatoryFields}
                   onClick={handleConfirmImport}
                   data-testid="xml-confirm-import-btn"
                   className="px-5 py-2 rounded-xl bg-teal-700 text-white text-sm font-semibold hover:bg-teal-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[42px] cursor-pointer"

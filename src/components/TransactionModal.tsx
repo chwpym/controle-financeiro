@@ -17,7 +17,10 @@ interface TransactionModalProps {
   selectedCompanyId?: string | 'all';
   onClose: () => void;
   onSaveBatch: (items: Transaction[]) => void;
-  onUpdateSingle: (item: Transaction) => void;
+  onUpdateSingle: (
+    item: Transaction,
+    options?: { propagateGroupMetadata?: boolean }
+  ) => void;
 }
 
 const INPUT_CLS = 'w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm min-h-[44px]';
@@ -71,6 +74,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [recurrenceInterval, setRecurrenceInterval] = useState<RecurrenceInterval>(editingTransaction?.recurrenceInterval || 'monthly');
   const [recurrenceOccurrences, setRecurrenceOccurrences] = useState<number>(6);
   const [markFirstSettled, setMarkFirstSettled] = useState(false);
+  // Propagate Category & Contact across pending sibling installments by default (Phase 11.1.2)
+  const isPartOfInstallmentGroup = Boolean(
+    editingTransaction?.installmentGroupId && editingTransaction.installmentTotal > 1
+  );
+  const [propagateGroupMetadata, setPropagateGroupMetadata] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   const dueDateInputRef = useRef<HTMLInputElement>(null);
@@ -119,18 +127,21 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     const unifiedDoc = Array.from(new Set([...documentTags, ...parseDocumentTags(pendingDoc)])).join(', ');
 
     if (isEditing && editingTransaction) {
-      onUpdateSingle({
-        ...editingTransaction,
-        companyId: companyId || null,
-        type, description: description.trim(), amountCents: parsedCents, dueDate, status,
-        paidAt: status === 'settled' ? editingTransaction.paidAt || todayISO() : null,
-        paymentMethod: status === 'settled' ? paymentMethod || 'PIX' : '',
-        categoryId: categoryId || null, contactId: contactId || null,
-        documentNumber: unifiedDoc, issueDate: issueDate || null,
-        isRecurring: entryMode === 'recurring',
-        recurrenceInterval: entryMode === 'recurring' ? recurrenceInterval : null,
-        notes: notes.trim(), updatedAt: new Date().toISOString(),
-      });
+      onUpdateSingle(
+        {
+          ...editingTransaction,
+          companyId: companyId || null,
+          type, description: description.trim(), amountCents: parsedCents, dueDate, status,
+          paidAt: status === 'settled' ? editingTransaction.paidAt || todayISO() : null,
+          paymentMethod: status === 'settled' ? paymentMethod || 'PIX' : '',
+          categoryId: categoryId || null, contactId: contactId || null,
+          documentNumber: unifiedDoc, issueDate: issueDate || null,
+          isRecurring: entryMode === 'recurring',
+          recurrenceInterval: entryMode === 'recurring' ? recurrenceInterval : null,
+          notes: notes.trim(), updatedAt: new Date().toISOString(),
+        },
+        { propagateGroupMetadata: isPartOfInstallmentGroup && propagateGroupMetadata }
+      );
       return onClose();
     }
 
@@ -267,6 +278,24 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               {contacts.map((c) => <option key={c.id} value={c.id}>[{c.personType}] {c.name}</option>)}
             </select>
           </div>
+          {isEditing && isPartOfInstallmentGroup && editingTransaction && (
+            <label
+              data-testid="tx-propagate-group-checkbox-label"
+              className="sm:col-span-2 flex items-start gap-2.5 rounded-xl border border-teal-200 dark:border-teal-800/80 bg-teal-50/60 dark:bg-teal-950/30 p-3 text-xs cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                checked={propagateGroupMetadata}
+                onChange={(e) => setPropagateGroupMetadata(e.target.checked)}
+                data-testid="tx-propagate-group-checkbox"
+                className="mt-0.5 rounded border-slate-300 text-teal-700 w-4 h-4 shrink-0 cursor-pointer"
+              />
+              <span className="font-medium text-teal-900 dark:text-teal-200 leading-relaxed">
+                Replicar nova Categoria e Contato para todas as demais parcelas deste parcelamento (
+                {editingTransaction.installmentNumber}/{editingTransaction.installmentTotal})
+              </span>
+            </label>
+          )}
           <DocumentTagsInput tags={documentTags} onChange={setDocumentTags} />
           {renderDateField('Data de Entrada / Emissão NF', issueDate, setIssueDate, issueDateInputRef, 'Abrir calendário de emissão', 'tx-issue-date')}
           {(isIssueAfterDue || isIssueInFuture) && (

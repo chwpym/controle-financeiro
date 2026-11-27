@@ -223,11 +223,12 @@ export const XmlFiscalValidationCard: React.FC<XmlFiscalValidationCardProps> = (
         )}
 
         <span
-          className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 ${
+          data-testid="xml-operation-badge"
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 ${
             isSale ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
           }`}
         >
-          {isSale ? 'Conta a Receber (Venda)' : 'Conta a Pagar (Compra)'}
+          {isSale ? '🟢 Conta a Receber' : '🔴 Conta a Pagar'}
         </span>
       </div>
 

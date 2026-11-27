@@ -1,9 +1,21 @@
+/**
+ * EN: Settlement / Payment Confirmation Modal with Partial Settlement Split Support (Phase 11.1.2).
+ *     Allows entering the exact `Valor Recebido / Pago`. When `paidAmountCents < netTotalCents`,
+ *     surfaces the Partial Settlement checkbox (`Baixa Parcial: Quitar R$ X e gerar nova parcela com
+ *     o saldo restante R$ Y`) with an adjustable due date (`+30 dias` default) for the remaining balance.
+ * PT: Modal de Liquidação / Baixa com Suporte a Baixa Parcial e Desdobro de Saldo Devedor (Etapa 11.1.2).
+ *     Permite informar o valor efetivamente pago/recebido. Quando menor que o valor líquido da conta,
+ *     exibe a opção de Baixa Parcial com geração automática de nova parcela para o saldo remanescente.
+ */
+
 import React, { useMemo, useState } from 'react';
-import { Calendar, CheckCircle2, CreditCard, Repeat, X } from 'lucide-react';
+import { Calendar, CheckCircle2, CreditCard, GitBranch, Repeat, X } from 'lucide-react';
 import type { Contact, Transaction } from '../types';
 import {
+  addDaysISO,
   formatBRL,
   formatDateBR,
+  formatInputBRL,
   nextRecurrenceDate,
   parseBRLToCents,
   PAYMENT_METHODS,
@@ -11,7 +23,13 @@ import {
   todayISO,
 } from '../utils/format';
 
-interface SettleModalProps {
+export interface PartialSettlementOptions {
+  isPartial: true;
+  paidAmountCents: number;
+  remainderDueDate: string;
+}
+
+export interface SettleModalProps {
   transaction: Transaction;
   contact?: Contact;
   onClose: () => void;
@@ -21,7 +39,8 @@ interface SettleModalProps {
     notes: string,
     discountCents: number,
     interestCents: number,
-    generateNextRecurring: boolean
+    generateNextRecurring: boolean,
+    partialOptions?: PartialSettlementOptions
   ) => void;
 }
 
@@ -38,6 +57,14 @@ export const SettleModal: React.FC<SettleModalProps> = ({
   const [paidAt, setPaidAt] = useState<string>(todayISO());
   const [discountRaw, setDiscountRaw] = useState<string>('');
   const [interestRaw, setInterestRaw] = useState<string>('');
+  const [paidAmountRaw, setPaidAmountRaw] = useState<string>(() =>
+    formatInputBRL(transaction.amountCents)
+  );
+  const [customPaidEdited, setCustomPaidEdited] = useState<boolean>(false);
+  const [enablePartialSplit, setEnablePartialSplit] = useState<boolean>(true);
+  const [remainderDueDate, setRemainderDueDate] = useState<string>(() =>
+    addDaysISO(transaction.dueDate || todayISO(), 30)
+  );
   const [notes, setNotes] = useState<string>(transaction.notes || '');
   const [generateNextRecurring, setGenerateNextRecurring] = useState<boolean>(
     Boolean(transaction.isRecurring)
@@ -46,10 +73,22 @@ export const SettleModal: React.FC<SettleModalProps> = ({
   const discountCents = useMemo(() => parseBRLToCents(discountRaw), [discountRaw]);
   const interestCents = useMemo(() => parseBRLToCents(interestRaw), [interestRaw]);
 
-  const finalAmountCents = useMemo(
+  const netFullAmountCents = useMemo(
     () => Math.max(1, transaction.amountCents - discountCents + interestCents),
     [transaction.amountCents, discountCents, interestCents]
   );
+
+  const effectivePaidCents = useMemo(() => {
+    if (!customPaidEdited) return netFullAmountCents;
+    return parseBRLToCents(paidAmountRaw);
+  }, [customPaidEdited, paidAmountRaw, netFullAmountCents]);
+
+  const isPartialCandidate =
+    customPaidEdited && effectivePaidCents > 0 && effectivePaidCents < netFullAmountCents;
+
+  const remainderCents = isPartialCandidate
+    ? Math.max(1, netFullAmountCents - effectivePaidCents)
+    : 0;
 
   const nextDue = useMemo(() => {
     if (!transaction.isRecurring) return '';
@@ -62,11 +101,35 @@ export const SettleModal: React.FC<SettleModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isPartialCandidate && enablePartialSplit) {
+      onConfirm(
+        paymentMethod,
+        paidAt || todayISO(),
+        notes.trim(),
+        0,
+        0,
+        false,
+        {
+          isPartial: true,
+          paidAmountCents: effectivePaidCents,
+          remainderDueDate: remainderDueDate || addDaysISO(transaction.dueDate, 30),
+        }
+      );
+      onClose();
+      return;
+    }
+
+    // If user typed a lower value and unchecked Partial Split, treat difference as discount
+    const resolvedDiscount =
+      isPartialCandidate && !enablePartialSplit
+        ? discountCents + remainderCents
+        : discountCents;
+
     onConfirm(
       paymentMethod,
       paidAt || todayISO(),
       notes.trim(),
-      discountCents,
+      resolvedDiscount,
       interestCents,
       Boolean(transaction.isRecurring && generateNextRecurring)
     );
@@ -91,7 +154,7 @@ export const SettleModal: React.FC<SettleModalProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Fechar"
-            className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 min-h-[40px] min-w-[40px] flex items-center justify-center"
+            className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 min-h-[40px] min-w-[40px] flex items-center justify-center cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -108,26 +171,103 @@ export const SettleModal: React.FC<SettleModalProps> = ({
                 {contact ? ` · ${contact.name}` : ''}
               </span>
               <span className="font-mono-tabular">
-                Original: <strong>{formatBRL(transaction.amountCents)}</strong>
+                Total da Conta: <strong>{formatBRL(transaction.amountCents)}</strong>
               </span>
             </div>
-            {(discountCents > 0 || interestCents > 0) && (
-              <div className="pt-1.5 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between text-xs">
-                <span className="text-slate-600 dark:text-slate-300">
-                  Valor final após ajuste:
-                </span>
-                <span
-                  className={`font-mono-tabular font-bold text-sm ${
-                    isReceivable
-                      ? 'text-emerald-700 dark:text-emerald-400'
-                      : 'text-rose-700 dark:text-rose-400'
-                  }`}
-                >
-                  {formatBRL(finalAmountCents)}
-                </span>
-              </div>
-            )}
           </div>
+
+          {/* Paid / Received Value Field (Supports Partial Settlement) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label
+                htmlFor="settle-paid-amount"
+                className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1"
+              >
+                {isReceivable ? 'Valor Recebido Agora (R$) *' : 'Valor Pago Agora (R$) *'}
+              </label>
+              <input
+                id="settle-paid-amount"
+                data-testid="settle-paid-amount-input"
+                type="text"
+                inputMode="decimal"
+                value={customPaidEdited ? paidAmountRaw : formatInputBRL(netFullAmountCents)}
+                onChange={(e) => {
+                  setCustomPaidEdited(true);
+                  setPaidAmountRaw(e.target.value);
+                }}
+                placeholder="0,00"
+                className="w-full px-3 py-2 rounded-xl border border-teal-500/60 dark:border-teal-600/70 bg-white dark:bg-slate-950 text-sm font-bold font-mono-tabular min-h-[42px]"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="settle-paid-date"
+                className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1"
+              >
+                {isReceivable ? 'Data recebimento *' : 'Data pagamento *'}
+              </label>
+              <div className="relative">
+                <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  id="settle-paid-date"
+                  type="date"
+                  value={paidAt}
+                  onChange={(e) => setPaidAt(e.target.value)}
+                  required
+                  className="w-full pl-9 pr-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-mono-tabular min-h-[42px]"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Solução B: Partial Settlement Split Box when Paid < Total */}
+          {isPartialCandidate && (
+            <div
+              data-testid="partial-settlement-panel"
+              className="rounded-xl border border-indigo-300 dark:border-indigo-700 bg-indigo-50/70 dark:bg-indigo-950/35 p-3.5 space-y-2.5 text-xs"
+            >
+              <label className="flex items-start gap-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={enablePartialSplit}
+                  onChange={(e) => setEnablePartialSplit(e.target.checked)}
+                  data-testid="partial-settlement-checkbox"
+                  className="mt-0.5 rounded border-slate-300 text-indigo-600 w-4 h-4 shrink-0 cursor-pointer"
+                />
+                <div className="space-y-0.5">
+                  <div className="font-semibold text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+                    <GitBranch className="w-3.5 h-3.5 shrink-0" />
+                    <span>
+                      Baixa Parcial: Quitar {formatBRL(effectivePaidCents)} e gerar nova parcela com o saldo restante ({formatBRL(remainderCents)})
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-indigo-800 dark:text-indigo-300">
+                    Mantém o saldo devedor em aberto vinculado ao mesmo parcelamento sem lançar desconto indevido.
+                  </p>
+                </div>
+              </label>
+
+              {enablePartialSplit && (
+                <div className="pt-2 border-t border-indigo-200/80 dark:border-indigo-800/70 flex flex-wrap items-center justify-between gap-2">
+                  <label
+                    htmlFor="partial-remainder-due-date"
+                    className="text-[11px] font-semibold text-indigo-900 dark:text-indigo-200"
+                  >
+                    Vencimento do saldo restante ({formatBRL(remainderCents)}):
+                  </label>
+                  <input
+                    id="partial-remainder-due-date"
+                    data-testid="partial-remainder-duedate-input"
+                    type="date"
+                    value={remainderDueDate}
+                    onChange={(e) => setRemainderDueDate(e.target.value)}
+                    className="px-2.5 py-1.5 rounded-lg border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-slate-950 font-mono-tabular text-xs min-h-[36px]"
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-2">
@@ -142,7 +282,7 @@ export const SettleModal: React.FC<SettleModalProps> = ({
                   key={method}
                   type="button"
                   onClick={() => setPaymentMethod(method)}
-                  className={`px-3 py-2 rounded-xl border text-xs font-semibold text-left transition-colors min-h-[40px] ${
+                  className={`px-3 py-2 rounded-xl border text-xs font-semibold text-left transition-colors min-h-[40px] cursor-pointer ${
                     paymentMethod === method
                       ? 'border-teal-700 bg-teal-50 dark:bg-teal-950/50 text-teal-800 dark:text-teal-300'
                       : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
@@ -154,51 +294,43 @@ export const SettleModal: React.FC<SettleModalProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                {isReceivable ? 'Data recebimento *' : 'Data pagamento *'}
-              </label>
-              <div className="relative">
-                <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          {!isPartialCandidate && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Desconto (- R$)
+                </label>
                 <input
-                  type="date"
-                  value={paidAt}
-                  onChange={(e) => setPaidAt(e.target.value)}
-                  required
-                  className="w-full pl-9 pr-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-mono-tabular min-h-[42px]"
+                  type="text"
+                  inputMode="decimal"
+                  value={discountRaw}
+                  onChange={(e) => {
+                    setCustomPaidEdited(false);
+                    setDiscountRaw(e.target.value);
+                  }}
+                  placeholder="0,00"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-mono-tabular min-h-[40px]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Juros / Multa (+ R$)
+                </label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={interestRaw}
+                  onChange={(e) => {
+                    setCustomPaidEdited(false);
+                    setInterestRaw(e.target.value);
+                  }}
+                  placeholder="0,00"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-mono-tabular min-h-[40px]"
                 />
               </div>
             </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Desconto (- R$)
-              </label>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={discountRaw}
-                onChange={(e) => setDiscountRaw(e.target.value)}
-                placeholder="0,00"
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-mono-tabular min-h-[42px]"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Juros / Multa (+ R$)
-              </label>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={interestRaw}
-                onChange={(e) => setInterestRaw(e.target.value)}
-                placeholder="0,00"
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-mono-tabular min-h-[42px]"
-              />
-            </div>
-          </div>
+          )}
 
           <div>
             <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
@@ -213,7 +345,7 @@ export const SettleModal: React.FC<SettleModalProps> = ({
             />
           </div>
 
-          {transaction.isRecurring && (
+          {transaction.isRecurring && !isPartialCandidate && (
             <label className="flex items-start gap-2.5 rounded-xl border border-teal-200 dark:border-teal-900 bg-teal-50/70 dark:bg-teal-950/30 p-3 text-xs cursor-pointer">
               <input
                 type="checkbox"
@@ -238,25 +370,34 @@ export const SettleModal: React.FC<SettleModalProps> = ({
 
           <div className="pt-2 flex items-center justify-between gap-2">
             <div className="text-xs font-mono-tabular text-slate-600 dark:text-slate-300">
-              Total: <strong className="text-slate-900 dark:text-white">{formatBRL(finalAmountCents)}</strong>
+              Baixar agora:{' '}
+              <strong className="text-slate-900 dark:text-white">
+                {formatBRL(effectivePaidCents > 0 ? effectivePaidCents : netFullAmountCents)}
+              </strong>
             </div>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 min-h-[44px]"
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 min-h-[44px] cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
-                className={`px-5 py-2 rounded-xl text-white text-sm font-semibold transition-colors min-h-[44px] ${
+                disabled={customPaidEdited && effectivePaidCents <= 0}
+                data-testid="settle-confirm-btn"
+                className={`px-5 py-2 rounded-xl text-white text-sm font-semibold transition-colors min-h-[44px] disabled:opacity-50 cursor-pointer ${
                   isReceivable
                     ? 'bg-emerald-600 hover:bg-emerald-700'
                     : 'bg-teal-700 hover:bg-teal-800'
                 }`}
               >
-                {isReceivable ? 'Confirmar Recebimento' : 'Confirmar Pagamento'}
+                {isPartialCandidate && enablePartialSplit
+                  ? 'Confirmar Baixa Parcial'
+                  : isReceivable
+                    ? 'Confirmar Recebimento'
+                    : 'Confirmar Pagamento'}
               </button>
             </div>
           </div>

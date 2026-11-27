@@ -1,7 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { Eye, FileSpreadsheet, FileText, Filter, RotateCcw, Search, X } from 'lucide-react';
-import type { Category, Contact, Transaction } from '../types';
-import { exportTransactionsToExcel, exportTransactionsToPDF } from '../utils/exporters';
+import type { Category, Company, Contact, Transaction } from '../types';
+import {
+  exportBlankReceiptPDF,
+  exportTransactionsToExcel,
+  exportTransactionsToPDF,
+} from '../utils/exporters';
 import {
   formatBRL,
   formatDateBR,
@@ -23,6 +27,8 @@ interface ReportsViewProps {
   transactions: Transaction[];
   categories: Category[];
   contacts: Contact[];
+  companies?: Company[];
+  selectedCompanyId?: string | 'all';
   onOpenConsult: (tx: Transaction) => void;
 }
 
@@ -32,6 +38,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   transactions,
   categories,
   contacts,
+  companies = [],
+  selectedCompanyId = 'all',
   onOpenConsult,
 }) => {
   const today = todayISO();
@@ -212,6 +220,23 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              data-testid="reports-blank-receipt-btn"
+              onClick={() => {
+                const activeComp =
+                  (selectedCompanyId && selectedCompanyId !== 'all'
+                    ? companies.find((c) => c.id === selectedCompanyId)
+                    : undefined) ||
+                  companies.find((c) => c.isDefault) ||
+                  companies[0];
+                exportBlankReceiptPDF(activeComp);
+              }}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 min-h-[40px] whitespace-nowrap cursor-pointer"
+            >
+              <FileText className="w-4 h-4 text-teal-700 dark:text-teal-400" />
+              <span>📄 Recibo em Branco</span>
+            </button>
             <button
               type="button"
               disabled={scopedTransactions.length === 0}

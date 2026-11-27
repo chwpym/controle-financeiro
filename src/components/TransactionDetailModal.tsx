@@ -12,7 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import type { Category, Company, Contact, Transaction } from '../types';
-import { exportTransactionReceiptPDF } from '../utils/exporters';
+import { exportBlankReceiptPDF, exportTransactionReceiptPDF } from '../utils/exporters';
 import { formatBRL, formatDateBR, isOverdue, RECURRENCE_LABELS, todayISO } from '../utils/format';
 
 interface TransactionDetailModalProps {
@@ -359,28 +359,41 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0 bg-slate-50/70 dark:bg-slate-900">
-          <button
-            type="button"
-            onClick={() =>
-              exportTransactionReceiptPDF({
-                transaction: tx,
-                category,
-                contact,
-                company: resolvedCompany,
-                username,
-              })
-            }
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-teal-700 text-white text-xs sm:text-sm font-semibold hover:bg-teal-800 transition-colors min-h-[44px]"
-          >
-            <FileText className="w-4 h-4" />
-            Exportar Recibo (PDF)
-          </button>
+        <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2.5 shrink-0 bg-slate-50/70 dark:bg-slate-900">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              data-testid="detail-export-receipt-btn"
+              onClick={() =>
+                exportTransactionReceiptPDF({
+                  transaction: tx,
+                  category,
+                  contact,
+                  company: resolvedCompany,
+                  username,
+                })
+              }
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-teal-700 text-white text-xs sm:text-sm font-semibold hover:bg-teal-800 transition-colors min-h-[44px] cursor-pointer"
+            >
+              <FileText className="w-4 h-4" />
+              Exportar Recibo (2 Vias)
+            </button>
+
+            <button
+              type="button"
+              data-testid="detail-export-blank-receipt-btn"
+              onClick={() => exportBlankReceiptPDF(resolvedCompany)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors min-h-[44px] cursor-pointer"
+            >
+              <FileText className="w-4 h-4 text-teal-700 dark:text-teal-400" />
+              <span>📄 Recibo em Branco</span>
+            </button>
+          </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 min-h-[44px]"
+            className="px-5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 min-h-[44px] cursor-pointer"
           >
             Fechar
           </button>

@@ -34,7 +34,7 @@ import { NotificationsBell } from './components/NotificationsBell';
 import { OfflineSyncBanner, PWAInstallButton } from './components/PWAInstallButton';
 import { ReportsView } from './components/ReportsView';
 import { SettingsView } from './components/SettingsView';
-import { SettleModal } from './components/SettleModal';
+import { SettleModal, type PartialSettlementOptions } from './components/SettleModal';
 import { SystemReleaseModal } from './components/SystemReleaseModal';
 import { TransactionDetailModal } from './components/TransactionDetailModal';
 import { TransactionModal } from './components/TransactionModal';
@@ -56,6 +56,7 @@ import type {
 import { api, ApiError } from './utils/api';
 import {
   buildDuplicatedTransaction,
+  buildPartialSettlementSplit,
   currentMonthKey,
   daysUntilDue,
   formatBRL,
@@ -522,13 +523,55 @@ export default function App() {
     await queueOrSync('tx_batch_upsert', items, () => api.upsertTransactionsBatch(items));
   };
 
-  const handleUpdateSingleTransaction = async (item: Transaction) => {
+  const handleUpdateSingleTransaction = async (
+    item: Transaction,
+    options?: { propagateGroupMetadata?: boolean }
+  ) => {
     if (!user || !ensureLicenseAllowsWrite()) return;
+
+    // Phase 11.1.2: Propagate Category & Contact across pending sibling installments when requested
+    // Etapa 11.1.2: Replica Categoria e Contato para todas as demais parcelas pendentes do mesmo parcelamento
+    if (options?.propagateGroupMetadata && item.installmentGroupId) {
+      const now = new Date().toISOString();
+      const siblingsToUpdate: Transaction[] = [];
+      const next = transactions
+        .map((t) => {
+          if (t.id === item.id) return item;
+          if (t.installmentGroupId === item.installmentGroupId && t.status === 'pending') {
+            const updatedSibling: Transaction = {
+              ...t,
+              categoryId: item.categoryId,
+              contactId: item.contactId,
+              companyId: item.companyId ?? t.companyId,
+              updatedAt: now,
+            };
+            siblingsToUpdate.push(updatedSibling);
+            return updatedSibling;
+          }
+          return t;
+        })
+        .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+
+      setTransactions(next);
+      await persistCache(user.id, categories, contacts, next, companies);
+
+      const batchPayload = [item, ...siblingsToUpdate];
+      showToast(
+        siblingsToUpdate.length > 0
+          ? `Lançamento e mais ${siblingsToUpdate.length} parcela(s) pendente(s) atualizados.`
+          : 'Lançamento atualizado.'
+      );
+      await queueOrSync('tx_batch_upsert', batchPayload, () =>
+        api.upsertTransactionsBatch(batchPayload)
+      );
+      return;
+    }
+
     const next = transactions
       .map((t) => (t.id === item.id ? item : t))
       .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
     setTransactions(next);
-    await persistCache(user.id, categories, contacts, next);
+    await persistCache(user.id, categories, contacts, next, companies);
     showToast('Lançamento atualizado.');
     await queueOrSync('tx_update', item, () => api.upsertTransaction(item));
   };
@@ -562,17 +605,57 @@ export default function App() {
     notes: string,
     discountCents: number,
     interestCents: number,
-    generateNextRecurring: boolean
+    generateNextRecurring: boolean,
+    partialOptions?: PartialSettlementOptions
   ) => {
     if (!settlingTx || !user) return;
+    const currentSettling = settlingTx;
+    setSettlingTx(null);
+
+    // Phase 11.1.2 (Solução B): Partial Settlement with Remaining Balance Split
+    // Etapa 11.1.2 (Solução B): Baixa Parcial com geração automática de parcela com o saldo devedor restante
+    if (partialOptions?.isPartial) {
+      const { settledTx, remainderTx, updatedSiblings } = buildPartialSettlementSplit({
+        targetTx: currentSettling,
+        allTransactions: transactions,
+        paidAmountCents: partialOptions.paidAmountCents,
+        paymentMethod,
+        paidAt,
+        notes,
+        remainderDueDate: partialOptions.remainderDueDate,
+      });
+
+      const siblingMap = new Map(updatedSiblings.map((s) => [s.id, s]));
+      const nextList = transactions
+        .map((t) => {
+          if (t.id === settledTx.id) return settledTx;
+          if (siblingMap.has(t.id)) return siblingMap.get(t.id)!;
+          return t;
+        })
+        .concat(remainderTx)
+        .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+
+      setTransactions(nextList);
+      await persistCache(user.id, categories, contacts, nextList, companies);
+      showToast(
+        `Baixa parcial de ${formatBRL(settledTx.amountCents)} registrada e saldo restante de ${formatBRL(remainderTx.amountCents)} gerado.`
+      );
+
+      const batchPayload = [settledTx, remainderTx, ...updatedSiblings];
+      await queueOrSync('tx_batch_upsert', batchPayload, () =>
+        api.upsertTransactionsBatch(batchPayload)
+      );
+      return;
+    }
+
     const baseAmount = Math.max(
       1,
-      settlingTx.amountCents + (settlingTx.discountCents || 0) - (settlingTx.interestCents || 0)
+      currentSettling.amountCents + (currentSettling.discountCents || 0) - (currentSettling.interestCents || 0)
     );
     const finalAmount = Math.max(1, baseAmount - discountCents + interestCents);
 
     const updated: Transaction = {
-      ...settlingTx,
+      ...currentSettling,
       amountCents: finalAmount,
       discountCents,
       interestCents,
@@ -582,9 +665,6 @@ export default function App() {
       notes,
       updatedAt: new Date().toISOString(),
     };
-
-    const currentSettling = settlingTx;
-    setSettlingTx(null);
 
     if (generateNextRecurring && currentSettling.isRecurring && currentSettling.recurrenceInterval) {
       const nextDue = nextRecurrenceDate(
@@ -1334,6 +1414,8 @@ export default function App() {
                   transactions={transactions}
                   categories={categories}
                   contacts={contacts}
+                  companies={companies}
+                  selectedCompanyId={selectedCompanyId}
                   onOpenConsult={(tx) => setConsultingTx(tx)}
                 />
               )}

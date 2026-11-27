@@ -24,6 +24,7 @@ import {
   calculateSettledAmount,
   distributeCents,
   splitSingleTransactionIntoInstallments,
+  buildPartialSettlementSplit,
   renegotiateInstallmentGroup,
 } from '../format';
 import type { Transaction } from '../../types';
@@ -896,6 +897,63 @@ describe('renegotiateInstallmentGroup', () => {
       expect(isValidCNPJ('12.345.678/0001-90')).toBe(false); // Wrong check digits
       expect(isValidCNPJ('12.ABC.345/01DE-34')).toBe(false); // Wrong DV in alphanumeric
       expect(isValidCNPJ('12.ABC.345/01DE-AB')).toBe(false); // Letters in DVs not allowed
+    });
+  });
+
+  describe('buildPartialSettlementSplit (Etapa 11.1.2 — Baixa Parcial com Desdobro)', () => {
+    it('settles the paid portion (R$ 600,00) and generates a new pending installment for the remaining balance (R$ 700,00)', () => {
+      const fullTx: Transaction = {
+        id: 'tx-full-1300',
+        userId: 'u1',
+        companyId: 'comp-1',
+        type: 'receivable',
+        description: 'Venda Balcão NF 450',
+        amountCents: 130000, // R$ 1.300,00
+        discountCents: 0,
+        interestCents: 0,
+        dueDate: '2026-11-27',
+        paidAt: null,
+        status: 'pending',
+        paymentMethod: '',
+        categoryId: 'cat-vendas',
+        contactId: 'ct-cliente',
+        documentNumber: 'NF-450',
+        issueDate: '2026-11-27',
+        installmentGroupId: null,
+        installmentNumber: 1,
+        installmentTotal: 1,
+        isRecurring: false,
+        recurrenceInterval: null,
+        notes: '',
+        source: 'manual',
+        createdAt: '2026-11-27T10:00:00Z',
+        updatedAt: '2026-11-27T10:00:00Z',
+      };
+
+      const { settledTx, remainderTx, updatedSiblings } = buildPartialSettlementSplit({
+        targetTx: fullTx,
+        allTransactions: [fullTx],
+        paidAmountCents: 60000, // R$ 600,00
+        paymentMethod: 'PIX',
+        paidAt: '2026-11-27',
+        notes: 'Entrada no balcão',
+        remainderDueDate: '2026-12-27',
+      });
+
+      expect(updatedSiblings).toHaveLength(0);
+      expect(settledTx.status).toBe('settled');
+      expect(settledTx.amountCents).toBe(60000);
+      expect(settledTx.paymentMethod).toBe('PIX');
+      expect(settledTx.installmentNumber).toBe(1);
+      expect(settledTx.installmentTotal).toBe(2);
+
+      expect(remainderTx.status).toBe('pending');
+      expect(remainderTx.amountCents).toBe(70000);
+      expect(remainderTx.dueDate).toBe('2026-12-27');
+      expect(remainderTx.installmentNumber).toBe(2);
+      expect(remainderTx.installmentTotal).toBe(2);
+      expect(remainderTx.installmentGroupId).toBe(settledTx.installmentGroupId);
+      expect(settledTx.amountCents + remainderTx.amountCents).toBe(130000);
     });
   });
 });

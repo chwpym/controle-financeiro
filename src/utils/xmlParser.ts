@@ -28,6 +28,11 @@ export interface ParsedXmlPreviewItem {
   installmentNumber: number;
   installmentTotal: number;
   installmentGroupId: string | null;
+  /**
+   * EN: Flag indicating this installment row was manually added by the user in the preview table.
+   * PT: Indica que esta parcela avulsa foi adicionada manualmente pelo usuário na tabela de prévia.
+   */
+  isManualAdded?: boolean;
 }
 
 /**

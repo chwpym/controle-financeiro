@@ -1,17 +1,18 @@
 /**
- * EN: Custom React Hook for the Evolved XML Import Center (Phase 11.1).
- *     Manages single & multi-XML batch state, intelligent issuer/recipient company detection,
- *     inline installment editing (due date + cents), real-time reconciliation & commercial
- *     adjustments (+ additions / - deductions), and non-destructive contact registration.
- * PT: Hook React customizado para a Central de Importação de XML Evoluída (Fase 11.1).
- *     Gerencia estado individual e em lote (Multi-XML), detecção fiscal Emitente/Destinatário,
- *     edição inline de parcelas (vencimento + valor em centavos), batimento em tempo real com
- *     ajustes comerciais (+ acréscimos / - abatimentos) e cadastro de contato sem perder dados.
+ * EN: Custom React Hook for the Evolved XML Import Center (Phase 11.1.2).
+ *     Manages single & multi-XML batch state, strict two-agent fiscal detection,
+ *     mandatory Category + Contact validation with smart category auto-suggestion,
+ *     flexible installment builder (`+ Adicionar Parcela`, `2x/3x/4x/6x` exact split, remove row),
+ *     inline installment editing, and real-time commercial adjustments.
+ * PT: Hook React customizado para a Central de Importação de XML Evoluída (Etapa 11.1.2).
+ *     Gerencia estado individual e Multi-XML, detecção fiscal estrita, obrigatoriedade de
+ *     Categoria e Contato com auto-sugestão inteligente, parcelamento flexível (`+ Adicionar Parcela`,
+ *     rateio exato `2x/3x/4x/6x` e exclusão de avulsas), edição inline e batimento comercial.
  */
 
 import { useCallback, useMemo, useState } from 'react';
 import type { Category, Company, Contact, Transaction, TransactionType } from '../types';
-import { cleanDocumentDigits } from '../utils/format';
+import { addDaysISO, addMonthsISO, cleanDocumentDigits, distributeCents, todayISO } from '../utils/format';
 import {
   adaptXmlItemsForType,
   buildContactFromXmlParty,
@@ -41,10 +42,6 @@ export interface UseXmlImportProps {
   onClose: () => void;
 }
 
-/**
- * EN: Complete state for a single loaded XML invoice inside the batch queue.
- * PT: Estado individual completo de uma nota XML carregada na fila de importação.
- */
 export interface XmlInvoiceEntry {
   id: string;
   fileName: string;
@@ -73,19 +70,43 @@ export interface ComputedInvoiceSummary {
   divergenceCents: number;
   adjustmentType: XmlAdjustmentType;
   resolvedReasonLabel: string;
-  /**
-   * EN: Strict Two-Agent Fiscal Lock: true when an NF-e/NFS-e matches neither Issuer nor Recipient
-   *     among the user's registered companies, blocking import until the company is registered.
-   * PT: Trava Rígida de Integridade Fiscal (Regra de Dois Agentes): verdadeira quando nem o Emitente
-   *     nem o Destinatário pertencem às empresas cadastradas, bloqueando a importação.
-   */
   isBlockedByFiscalLock: boolean;
+  isMissingMandatoryFields: boolean;
 }
 
-const normalizeText = (v: string) => v.trim().toLowerCase().replace(/\s+/g, ' ');
+const normalizeText = (v: string) =>
+  v
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
 
 const DEFAULT_POSITIVE_REASON = POSITIVE_ADJUSTMENT_REASONS[0].value;
 const DEFAULT_NEGATIVE_REASON = NEGATIVE_ADJUSTMENT_REASONS[0].value;
+
+/**
+ * EN: Auto-suggests the most suitable Category for `txType` (e.g. "Fornecedores" / "Peças" / "Compras"
+ *     for payable; "Vendas" / "Serviços" / "Receitas" for receivable), falling back to the first compatible category.
+ * PT: Pré-seleciona automaticamente a categoria mais adequada para o tipo de operação (ex: "Fornecedores" / "Peças"
+ *     para Conta a Pagar; "Vendas de Produtos" / "Vendas" para Conta a Receber), ou a primeira compatível.
+ */
+export function suggestXmlCategoryId(categories: Category[], txType: TransactionType): string {
+  const compatible = categories.filter((c) => c.type === 'both' || c.type === txType);
+  if (compatible.length === 0) return '';
+
+  const keywords =
+    txType === 'payable'
+      ? ['fornecedor', 'peca', 'compra', 'mercadoria', 'estoque', 'insumo', 'custo']
+      : ['venda', 'produto', 'receita', 'faturamento', 'servico', 'cliente'];
+
+  for (const kw of keywords) {
+    const matched = compatible.find((c) => normalizeText(c.name).includes(kw));
+    if (matched) return matched.id;
+  }
+
+  return compatible[0].id;
+}
 
 function buildDefaultGenericMapping(fields: string[]): GenericXmlMapping {
   const matchPattern = (patterns: string[]) =>
@@ -111,8 +132,39 @@ function getReasonLabel(type: XmlAdjustmentType, reasonValue: string): string {
   return '';
 }
 
+/**
+ * EN: Re-indexes installment numbers, totals, shared group ID, and description `(i/N)` suffixes.
+ * PT: Re-indexa numeração de parcelas, total, `installmentGroupId` compartilhado e sufixos `(i/N)`.
+ */
+function reindexXmlPreviewItems(
+  items: ParsedXmlPreviewItem[],
+  analysis: XmlAnalysisResult | null,
+  txType: TransactionType
+): ParsedXmlPreviewItem[] {
+  const count = items.length;
+  const groupId = count > 1 ? items[0]?.installmentGroupId || crypto.randomUUID() : null;
+
+  return items.map((item, idx) => {
+    const cleanBaseDesc = item.description.replace(/\s*\(\d+\/\d+\)$/, '').trim();
+    const nextNumber = idx + 1;
+    const baseItem: ParsedXmlPreviewItem = {
+      ...item,
+      installmentNumber: nextNumber,
+      installmentTotal: count,
+      installmentGroupId: groupId,
+      description: count > 1 ? `${cleanBaseDesc} (${nextNumber}/${count})` : cleanBaseDesc,
+    };
+
+    if (analysis && analysis.kind !== 'generic') {
+      return adaptXmlItemsForType(analysis, [baseItem], txType)[0];
+    }
+    return baseItem;
+  });
+}
+
 export function useXmlImport({
   userId,
+  categories,
   contacts,
   companies = [],
   selectedCompanyId = 'all',
@@ -127,8 +179,6 @@ export function useXmlImport({
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [creatingContact, setCreatingContact] = useState(false);
 
-  // EN: Matches a contact by cleaned CPF/CNPJ first, falling back to normalized name.
-  // PT: Localiza um contato primeiro pelo CPF/CNPJ limpo e, em seguida, pelo nome normalizado.
   const tryMatchContact = useCallback(
     (docNum: string, name: string, contactPool: Contact[] = contacts) => {
       const cleanDoc = cleanDocumentDigits(docNum);
@@ -141,8 +191,6 @@ export function useXmlImport({
     [contacts]
   );
 
-  // EN: Creates an `XmlInvoiceEntry` from a parsed file with automatic fiscal detection.
-  // PT: Cria um `XmlInvoiceEntry` a partir de um arquivo processado com detecção fiscal automática.
   const createEntryFromParsed = useCallback(
     (
       id: string,
@@ -181,6 +229,7 @@ export function useXmlImport({
       if (analysis.kind === 'generic') {
         const mapping = buildDefaultGenericMapping(analysis.fields);
         const mappedItems = mapGenericXmlRows(analysis.rows, mapping);
+        const defaultCat = suggestXmlCategoryId(categories, 'payable');
         return {
           id,
           fileName,
@@ -189,7 +238,7 @@ export function useXmlImport({
           detection,
           txType: 'payable',
           companyId: detection.companyId,
-          categoryId: '',
+          categoryId: defaultCat,
           contactId: '',
           editedItems: mappedItems,
           excludedIds: new Set(),
@@ -206,6 +255,7 @@ export function useXmlImport({
         detection.counterpartyDocument,
         detection.counterpartyName
       );
+      const suggestedCatId = suggestXmlCategoryId(categories, txType);
 
       const sumItems = adaptedItems.reduce((s, it) => s + it.amountCents, 0);
       const diff = Math.round(sumItems - analysis.invoiceTotalCents);
@@ -218,7 +268,7 @@ export function useXmlImport({
         detection,
         txType,
         companyId: detection.companyId,
-        categoryId: '',
+        categoryId: suggestedCatId,
         contactId: matchedContact ? matchedContact.id : '',
         editedItems: adaptedItems,
         excludedIds: new Set(),
@@ -234,15 +284,9 @@ export function useXmlImport({
         selectedForBatch: true,
       };
     },
-    [companies, selectedCompanyId, tryMatchContact]
+    [companies, selectedCompanyId, categories, tryMatchContact]
   );
 
-  /**
-   * EN: Handles multiple XML files dropped or selected at once (`multiple`).
-   *     When `append` is true, adds new files to the existing batch; otherwise replaces.
-   * PT: Processa um ou múltiplos arquivos XML enviados (`multiple`).
-   *     Quando `append` for verdadeiro, adiciona ao lote atual; caso contrário, substitui.
-   */
   const handleFilesSelected = useCallback(
     async (files: File[], append = false) => {
       if (!files || files.length === 0) return;
@@ -268,7 +312,6 @@ export function useXmlImport({
     [createEntryFromParsed]
   );
 
-  // Backwards-compatible single file handler / Handler compatível para arquivo único
   const handleFileChange = useCallback(
     (file: File) => {
       void handleFilesSelected([file], false);
@@ -305,7 +348,6 @@ export function useXmlImport({
     );
   }, []);
 
-  // Helper to mutate the currently active entry / Helper para atualizar a nota ativa
   const updateActiveEntry = useCallback(
     (updater: (entry: XmlInvoiceEntry) => XmlInvoiceEntry) => {
       setEntries((prev) =>
@@ -323,8 +365,6 @@ export function useXmlImport({
     return entries.find((e) => e.id === activeEntryId) || entries[0];
   }, [entries, activeEntryId]);
 
-  // Compute summary metrics for every entry (used both in single view and batch table)
-  // Calcula o resumo reativo de cada nota (usado tanto na visão individual quanto no lote)
   const computeEntrySummary = useCallback(
     (entry: XmlInvoiceEntry): ComputedInvoiceSummary => {
       const previewItems = entry.editedItems;
@@ -363,6 +403,9 @@ export function useXmlImport({
           (!entry.detection || entry.detection.matchedRole === 'none' || !entry.companyId)
       );
 
+      // Mandatory Category & Contact validation (Phase 11.1.2)
+      const isMissingMandatoryFields = Boolean(!entry.categoryId || !entry.contactId);
+
       return {
         entry,
         previewItems,
@@ -374,6 +417,7 @@ export function useXmlImport({
         adjustmentType,
         resolvedReasonLabel,
         isBlockedByFiscalLock,
+        isMissingMandatoryFields,
       };
     },
     [existingTransactions]
@@ -392,8 +436,16 @@ export function useXmlImport({
   const handleTypeChange = useCallback(
     (newType: TransactionType) => {
       updateActiveEntry((entry) => {
+        const currentCatObj = categories.find((c) => c.id === entry.categoryId);
+        const isCurrentCatValid = Boolean(
+          currentCatObj && (currentCatObj.type === 'both' || currentCatObj.type === newType)
+        );
+        const nextCatId = isCurrentCatValid
+          ? entry.categoryId
+          : suggestXmlCategoryId(categories, newType);
+
         if (!entry.analysis || entry.analysis.kind === 'generic') {
-          return { ...entry, txType: newType };
+          return { ...entry, txType: newType, categoryId: nextCatId };
         }
         const docToMatch =
           newType === 'receivable'
@@ -412,12 +464,13 @@ export function useXmlImport({
         return {
           ...entry,
           txType: newType,
+          categoryId: nextCatId,
           contactId: matched ? matched.id : '',
           editedItems: adapted,
         };
       });
     },
-    [updateActiveEntry, tryMatchContact]
+    [updateActiveEntry, categories, tryMatchContact]
   );
 
   const setCompanyId = useCallback(
@@ -429,6 +482,7 @@ export function useXmlImport({
 
   const setCategoryId = useCallback(
     (newCategoryId: string) => {
+      setGlobalError(null);
       updateActiveEntry((entry) => ({ ...entry, categoryId: newCategoryId }));
     },
     [updateActiveEntry]
@@ -436,6 +490,7 @@ export function useXmlImport({
 
   const setContactId = useCallback(
     (newContactId: string) => {
+      setGlobalError(null);
       updateActiveEntry((entry) => ({ ...entry, contactId: newContactId }));
     },
     [updateActiveEntry]
@@ -473,7 +528,6 @@ export function useXmlImport({
         if (next.has(tempId)) next.delete(tempId);
         else next.add(tempId);
 
-        // Keep adjustmentReason aligned if sign flips
         const nextSelected = entry.editedItems.filter((it) => !next.has(it.tempId));
         const sumCents = nextSelected.reduce((s, it) => s + it.amountCents, 0);
         const invCents =
@@ -494,10 +548,6 @@ export function useXmlImport({
     [updateActiveEntry]
   );
 
-  /**
-   * EN: Inline editing handler for an installment's due date (`YYYY-MM-DD`) or value (`amountCents`).
-   * PT: Handler de edição inline para alterar o vencimento (`YYYY-MM-DD`) ou o valor (`amountCents`) da parcela.
-   */
   const updateInstallmentItem = useCallback(
     (tempId: string, patch: Partial<Pick<ParsedXmlPreviewItem, 'dueDate' | 'amountCents' | 'description'>>) => {
       updateActiveEntry((entry) => {
@@ -538,6 +588,163 @@ export function useXmlImport({
     [updateActiveEntry]
   );
 
+  /**
+   * EN: Adds a new manual installment row (`[ + Adicionar Parcela ]`) carrying the remaining
+   *     balance needed to close the NF total (or equal fallback) and due date `+30 days` from the last row.
+   * PT: Adiciona uma nova parcela (`[ + Adicionar Parcela ]`) preenchida automaticamente com o saldo
+   *     restante que falta para fechar a NF e vencimento para `+30 dias` da última parcela.
+   */
+  const handleAddInstallment = useCallback(() => {
+    updateActiveEntry((entry) => {
+      const currentSelected = entry.editedItems.filter((it) => !entry.excludedIds.has(it.tempId));
+      const sumSelectedCents = currentSelected.reduce((s, it) => s + Math.round(it.amountCents), 0);
+      const targetInvoiceCents =
+        entry.analysis && entry.analysis.kind !== 'generic'
+          ? Math.round(entry.analysis.invoiceTotalCents)
+          : sumSelectedCents;
+
+      const remainingCents = Math.round(targetInvoiceCents - sumSelectedCents);
+      const newAmountCents =
+        remainingCents > 0
+          ? remainingCents
+          : Math.max(100, entry.editedItems[entry.editedItems.length - 1]?.amountCents || 100);
+
+      const lastItem = entry.editedItems[entry.editedItems.length - 1];
+      const baseDueDate = lastItem?.dueDate || todayISO();
+      const nextDueDate = addDaysISO(baseDueDate, 30);
+
+      const nNF =
+        entry.analysis && entry.analysis.kind !== 'generic' ? entry.analysis.invoiceNumber : '';
+      const nextIndex = entry.editedItems.length + 1;
+      const docPrefix =
+        entry.analysis?.kind === 'nfe'
+          ? nNF
+            ? `NFe-${nNF} / Dup ${String(nextIndex).padStart(3, '0')}`
+            : `Dup ${String(nextIndex).padStart(3, '0')}`
+          : entry.analysis?.kind === 'nfse'
+            ? nNF
+              ? `NFSe-${nNF} / Parc ${nextIndex}`
+              : `Parc ${nextIndex}`
+            : lastItem?.documentNumber || '';
+
+      const newItem: ParsedXmlPreviewItem = {
+        tempId: crypto.randomUUID(),
+        description: lastItem?.description || 'Parcela XML',
+        amountCents: newAmountCents,
+        dueDate: nextDueDate,
+        issueDate: lastItem?.issueDate || todayISO(),
+        documentNumber: docPrefix,
+        supplierName: lastItem?.supplierName || '',
+        supplierDocument: lastItem?.supplierDocument || '',
+        customerName: lastItem?.customerName,
+        customerDocument: lastItem?.customerDocument,
+        installmentNumber: nextIndex,
+        installmentTotal: nextIndex,
+        installmentGroupId: lastItem?.installmentGroupId || crypto.randomUUID(),
+        isManualAdded: true,
+      };
+
+      const reindexed = reindexXmlPreviewItems(
+        [...entry.editedItems, newItem],
+        entry.analysis,
+        entry.txType
+      );
+
+      return {
+        ...entry,
+        editedItems: reindexed,
+      };
+    });
+  }, [updateActiveEntry]);
+
+  /**
+   * EN: Splits the total NF value into `count` equal installments (`2x | 3x | 4x | 6x`) in 1 click
+   *     using exact integer cent math (`distributeCents`), placing any cent remainder on the 1st row.
+   * PT: Divide o valor total da NF em `count` parcelas iguais (`2x | 3x | 4x | 6x`) com 1 clique
+   *     via matemática inteira de centavos (`distributeCents`), alocando sobras na 1ª parcela.
+   */
+  const handleSplitInstallments = useCallback(
+    (count: number) => {
+      const safeCount = Math.max(1, Math.min(60, Math.floor(count)));
+      updateActiveEntry((entry) => {
+        const firstRef = entry.editedItems[0];
+        const currentSum = entry.editedItems.reduce((s, it) => s + Math.round(it.amountCents), 0);
+        const totalToSplit =
+          entry.analysis && entry.analysis.kind !== 'generic' && entry.analysis.invoiceTotalCents > 0
+            ? Math.round(entry.analysis.invoiceTotalCents)
+            : Math.max(safeCount, currentSum);
+
+        const centsShares = distributeCents(totalToSplit, safeCount);
+        const firstDueDate = firstRef?.dueDate || todayISO();
+        const issueDate = firstRef?.issueDate || firstDueDate;
+        const groupId = safeCount > 1 ? crypto.randomUUID() : null;
+        const nNF =
+          entry.analysis && entry.analysis.kind !== 'generic' ? entry.analysis.invoiceNumber : '';
+
+        const generated: ParsedXmlPreviewItem[] = centsShares.map((cents, idx) => {
+          const num = idx + 1;
+          const docStr =
+            entry.analysis?.kind === 'nfe'
+              ? nNF
+                ? `NFe-${nNF} / Dup ${String(num).padStart(3, '0')}`
+                : `Dup ${String(num).padStart(3, '0')}`
+              : entry.analysis?.kind === 'nfse'
+                ? nNF
+                  ? `NFSe-${nNF}${safeCount > 1 ? ` / Parc ${num}` : ''}`
+                  : 'NFSe'
+                : firstRef?.documentNumber || '';
+
+          return {
+            tempId: crypto.randomUUID(),
+            description: firstRef?.description || 'Parcela XML',
+            amountCents: cents,
+            dueDate: idx === 0 ? firstDueDate : addMonthsISO(firstDueDate, idx),
+            issueDate,
+            documentNumber: docStr,
+            supplierName: firstRef?.supplierName || '',
+            supplierDocument: firstRef?.supplierDocument || '',
+            customerName: firstRef?.customerName,
+            customerDocument: firstRef?.customerDocument,
+            installmentNumber: num,
+            installmentTotal: safeCount,
+            installmentGroupId: groupId,
+            isManualAdded: idx > 0,
+          };
+        });
+
+        const reindexed = reindexXmlPreviewItems(generated, entry.analysis, entry.txType);
+        return {
+          ...entry,
+          editedItems: reindexed,
+          excludedIds: new Set(),
+        };
+      });
+    },
+    [updateActiveEntry]
+  );
+
+  /**
+   * EN: Removes a manually added installment row (`[ ✕ ]`) and re-indexes remaining installments.
+   * PT: Remove uma parcela avulsa adicionada manualmente (`[ ✕ ]`) e renumera as restantes.
+   */
+  const handleRemoveInstallment = useCallback(
+    (tempId: string) => {
+      updateActiveEntry((entry) => {
+        if (entry.editedItems.length <= 1) return entry;
+        const filtered = entry.editedItems.filter((it) => it.tempId !== tempId);
+        const nextExcluded = new Set(entry.excludedIds);
+        nextExcluded.delete(tempId);
+        const reindexed = reindexXmlPreviewItems(filtered, entry.analysis, entry.txType);
+        return {
+          ...entry,
+          editedItems: reindexed,
+          excludedIds: nextExcluded,
+        };
+      });
+    },
+    [updateActiveEntry]
+  );
+
   const setAdjustmentReason = useCallback(
     (reason: string) => {
       updateActiveEntry((entry) => ({ ...entry, adjustmentReason: reason }));
@@ -552,7 +759,6 @@ export function useXmlImport({
     [updateActiveEntry]
   );
 
-  // Active counterparty details based on current txType / Dados do fornecedor ou cliente ativo
   const activeContact = useMemo(() => {
     const analysis = activeEntry?.analysis;
     if (!analysis || analysis.kind === 'generic') return null;
@@ -579,7 +785,6 @@ export function useXmlImport({
     };
   }, [activeEntry]);
 
-  // Quick one-click auto contact creation / Criação automática com 1 clique
   const handleAutoCreateContact = useCallback(async () => {
     if (!activeContact || !activeEntry) return;
     setGlobalError(null);
@@ -595,7 +800,6 @@ export function useXmlImport({
       );
       await onCreateContact(newContact);
 
-      // Link this newly created contact to all loaded entries sharing the same document
       const createdDocClean = cleanDocumentDigits(newContact.document);
       setEntries((prev) =>
         prev.map((entry) => {
@@ -621,8 +825,6 @@ export function useXmlImport({
     }
   }, [activeContact, activeEntry, userId, onCreateContact]);
 
-  // Callback after saving a contact from the full ContactDrawer modal without losing XML state
-  // Callback após gravar um contato no modal/gaveta completo sem fechar nem perder a nota importada
   const handleCustomContactSaved = useCallback(
     async (newContact: Contact) => {
       setGlobalError(null);
@@ -651,7 +853,6 @@ export function useXmlImport({
     [onCreateContact, activeEntryId]
   );
 
-  // Build transactions for a single ComputedInvoiceSummary
   const buildTransactionsForSummary = useCallback(
     (summary: ComputedInvoiceSummary): Transaction[] => {
       const { entry, selectedItems, divergenceCents, adjustmentType, resolvedReasonLabel } = summary;
@@ -681,13 +882,16 @@ export function useXmlImport({
     [userId]
   );
 
-  // Confirm import of the currently inspected single XML / Confirmar importação da nota individual
   const handleConfirmImport = useCallback(() => {
     if (!activeSummary) return;
     if (activeSummary.isBlockedByFiscalLock) {
       setGlobalError(
         'Trava de Segurança Fiscal: Nem o Emitente nem o Destinatário correspondem a uma empresa sua cadastrada.'
       );
+      return;
+    }
+    if (activeSummary.isMissingMandatoryFields) {
+      setGlobalError('Selecione a Categoria padrão e o Contato antes de importar.');
       return;
     }
     const validSelected = activeSummary.selectedItems.filter((it) => it.amountCents > 0);
@@ -701,9 +905,8 @@ export function useXmlImport({
     onClose();
   }, [activeSummary, buildTransactionsForSummary, onImport, onClose]);
 
-  // Confirm batch import of all selected valid XMLs / Confirmar importação em massa de todas as notas
   const handleConfirmBatchImport = useCallback(() => {
-    const selectedSummaries = entrySummaries.filter(
+    const candidateSummaries = entrySummaries.filter(
       (s) =>
         !s.entry.error &&
         !s.isBlockedByFiscalLock &&
@@ -711,12 +914,22 @@ export function useXmlImport({
         s.selectedItems.some((it) => it.amountCents > 0)
     );
 
-    if (selectedSummaries.length === 0) {
+    if (candidateSummaries.length === 0) {
       setGlobalError('Nenhuma nota fiscal válida vinculada a uma empresa sua para importar.');
       return;
     }
 
-    const allTransactions = selectedSummaries.flatMap((s) => buildTransactionsForSummary(s));
+    const missingFieldsSummary = candidateSummaries.find((s) => s.isMissingMandatoryFields);
+    if (missingFieldsSummary) {
+      setActiveEntryId(missingFieldsSummary.entry.id);
+      setViewMode('single');
+      setGlobalError(
+        `A nota "${missingFieldsSummary.entry.fileName}" exige Categoria padrão e Contato vinculados antes de importar.`
+      );
+      return;
+    }
+
+    const allTransactions = candidateSummaries.flatMap((s) => buildTransactionsForSummary(s));
     if (allTransactions.length === 0) {
       setGlobalError('Nenhuma parcela válida encontrada nas notas selecionadas.');
       return;
@@ -732,6 +945,7 @@ export function useXmlImport({
         (s) =>
           !s.entry.error &&
           !s.isBlockedByFiscalLock &&
+          !s.isMissingMandatoryFields &&
           s.entry.selectedForBatch &&
           s.selectedItems.some((it) => it.amountCents > 0)
       ),
@@ -754,7 +968,6 @@ export function useXmlImport({
   );
 
   return {
-    // Multi-XML / Batch state
     entries,
     entrySummaries,
     activeEntry,
@@ -772,7 +985,6 @@ export function useXmlImport({
     toggleBatchEntrySelection,
     handleConfirmBatchImport,
 
-    // Single active invoice state (backwards-compatible + enhanced)
     fileName: activeEntry?.fileName || '',
     analysis: activeEntry?.analysis || null,
     detection: activeEntry?.detection || null,
@@ -800,7 +1012,6 @@ export function useXmlImport({
     duplicateIds: activeSummary?.duplicateIds || new Set<string>(),
     selectedItems: activeSummary?.selectedItems || [],
 
-    // Reconciliation & Commercial Adjustments
     invoiceTotalCents: activeSummary?.invoiceTotalCents || 0,
     installmentsTotalCents: activeSummary?.installmentsTotalCents || 0,
     divergenceCents: activeSummary?.divergenceCents || 0,
@@ -810,12 +1021,15 @@ export function useXmlImport({
     adjustmentNotes: activeEntry?.adjustmentNotes || '',
     setAdjustmentNotes,
     isBlockedByFiscalLock: activeSummary?.isBlockedByFiscalLock || false,
+    isMissingMandatoryFields: activeSummary?.isMissingMandatoryFields || false,
 
-    // Actions
     handleFileChange,
     handleTypeChange,
     toggleItem,
     updateInstallmentItem,
+    handleAddInstallment,
+    handleSplitInstallments,
+    handleRemoveInstallment,
     handleAutoCreateContact,
     handleCustomContactSaved,
     handleConfirmImport,

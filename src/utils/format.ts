@@ -499,6 +499,122 @@ export function splitSingleTransactionIntoInstallments(
   });
 }
 
+export interface PartialSettlementResult {
+  settledTx: Transaction;
+  remainderTx: Transaction;
+  updatedSiblings: Transaction[];
+}
+
+/**
+ * EN: Executes a Partial Settlement (`Baixa Parcial`) on a pending transaction:
+ *     1. Settles the current transaction with `paidAmountCents` (recording cash flow entry/exit).
+ *     2. Generates a new pending installment for the remaining balance (`baseAmountCents - paidAmountCents`),
+ *        linked to the same `installmentGroupId` with due date `remainderDueDate` (+30 days by default),
+ *        and updates sibling `installmentTotal` counters consistently.
+ * PT: Executa uma Baixa Parcial com Desdobro de Saldo Devedor:
+ *     1. Quita o lançamento atual com o valor efetivamente pago (`paidAmountCents`).
+ *     2. Gera automaticamente uma nova parcela pendente com o saldo remanescente vinculada ao mesmo
+ *        `installmentGroupId`, renumerando o total de parcelas do contrato de forma íntegra.
+ */
+export function buildPartialSettlementSplit(params: {
+  targetTx: Transaction;
+  allTransactions: Transaction[];
+  paidAmountCents: number;
+  paymentMethod: string;
+  paidAt: string;
+  notes: string;
+  remainderDueDate?: string;
+}): PartialSettlementResult {
+  const { targetTx, allTransactions, paymentMethod, paidAt, notes } = params;
+  const now = new Date().toISOString();
+
+  const baseAmountCents = Math.max(
+    1,
+    Math.round(targetTx.amountCents + (targetTx.discountCents || 0) - (targetTx.interestCents || 0))
+  );
+  const safePaidCents = Math.max(1, Math.min(baseAmountCents - 1, Math.round(params.paidAmountCents)));
+  const remainderCents = Math.max(1, baseAmountCents - safePaidCents);
+
+  const groupId = targetTx.installmentGroupId || crypto.randomUUID();
+  const cleanDesc = (targetTx.description || '').replace(/\s*\(\d+\/\d+\)$/, '').trim();
+  const nextDue = params.remainderDueDate || addDaysISO(targetTx.dueDate, 30);
+
+  const siblings = targetTx.installmentGroupId
+    ? allTransactions.filter(
+        (t) => t.installmentGroupId === targetTx.installmentGroupId && t.id !== targetTx.id
+      )
+    : [];
+
+  const newTotal = siblings.length + 2;
+
+  // Order all existing items + new remainder chronologically to assign clean installment numbers
+  const settledCurrent: Transaction = {
+    ...targetTx,
+    installmentGroupId: groupId,
+    amountCents: safePaidCents,
+    discountCents: 0,
+    interestCents: 0,
+    status: 'settled',
+    paymentMethod,
+    paidAt,
+    notes: notes.trim()
+      ? notes.trim()
+      : `Baixa parcial (${formatBRL(safePaidCents)} de ${formatBRL(baseAmountCents)})`,
+    updatedAt: now,
+  };
+
+  const remainderTx: Transaction = {
+    ...targetTx,
+    id: crypto.randomUUID(),
+    installmentGroupId: groupId,
+    amountCents: remainderCents,
+    discountCents: 0,
+    interestCents: 0,
+    dueDate: nextDue,
+    paidAt: null,
+    status: 'pending',
+    paymentMethod: '',
+    notes: `Saldo remanescente de ${formatBRL(baseAmountCents)} (baixa parcial de ${formatBRL(safePaidCents)} em ${formatDateBR(paidAt)})`,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  const combinedGroup = [...siblings, settledCurrent, remainderTx].sort(
+    (a, b) => a.dueDate.localeCompare(b.dueDate) || a.installmentNumber - b.installmentNumber
+  );
+
+  let finalSettled = settledCurrent;
+  let finalRemainder = remainderTx;
+  const updatedSiblings: Transaction[] = [];
+
+  combinedGroup.forEach((item, idx) => {
+    const num = idx + 1;
+    const baseItemDesc = (item.description || cleanDesc).replace(/\s*\(\d+\/\d+\)$/, '').trim();
+    const reindexed: Transaction = {
+      ...item,
+      installmentGroupId: groupId,
+      installmentNumber: num,
+      installmentTotal: newTotal,
+      description: `${baseItemDesc} (${num}/${newTotal})`,
+      updatedAt: now,
+    };
+
+    if (reindexed.id === settledCurrent.id) {
+      finalSettled = reindexed;
+    } else if (reindexed.id === remainderTx.id) {
+      finalRemainder = reindexed;
+    } else {
+      updatedSiblings.push(reindexed);
+    }
+  });
+
+  return {
+    settledTx: finalSettled,
+    remainderTx: finalRemainder,
+    updatedSiblings,
+  };
+}
+
 export interface RenegotiateResult {
   toDeleteIds: string[];
   toUpsert: Transaction[];

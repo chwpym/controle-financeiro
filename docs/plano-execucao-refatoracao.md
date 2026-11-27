@@ -304,26 +304,27 @@ Implementar governança de versões, eliminação de problemas de cache do PWA n
   - **Central de Avisos Executiva (Resumo em Tópicos vs Lista Detalhada):** Alternância discreta entre `[ 📋 Resumo Executivo ]` e `[ 📄 Lista Detalhada ]`. No modo executivo, agrupar alertas em tópicos consolidados com valor acumulado e links diretos para ação (ex: *"8 Contas a Pagar Vencidas (R$ 2.903,28) ➔ [ Ver no Contas a Pagar ]"*), evitando poluição com dezenas de cards repetidos.
   - **Recibo/Comprovante Comercial Limpo (PDF 2 Vias por Folha A4):** O comprovante entregue ao cliente/fornecedor deve conter estritamente dados comerciais do pagamento (Empresa, Cliente, Valor, Parcela, Vencimento, Forma de Pagamento e Assinatura). Remover dados estritamente internos do sistema (como "Usuário responsável: master", "Origem: Importação XML", "Conta Recorrente: Não" e "Categoria: Vendas"). Implementar **layout econômico de 2 vias por folha A4** (1ª Via: Cliente / 2ª Via: Empresa/Arquivo) com linha pontilhada de corte (`✂ - - - -`), economizando 50% de papel e atendendo ao padrão clássico de balcão comercial, além de corrigir o espaçamento da assinatura para não sobrepor as observações.
 
-### 📋 Etapa 11.1.2: Integridade Financeira, Flexibilidade de Parcelamento no XML, Baixas Parciais e Recibo em 2 Vias
+### ✅ Etapa 11.1.2: Concluída com Sucesso (Integridade Financeira, Parcelamento Flexível no XML, Baixas Parciais e Recibo em 2 Vias)
 - **Badges Neutros e Universais:**
   - Remoção dos rótulos fixos `(Compra)` e `(Venda)` nos badges de operação do XML e formulários, mantendo a nomenclatura contábil limpa e universal: `🔴 Conta a Pagar` e `🟢 Conta a Receber`. A natureza da operação é governada pela Categoria selecionada.
 - **Obrigatoriedade de Categoria e Contato no Importador XML:**
-  - `Categoria padrão *` e `Vincular contato *` tornam-se estritamente obrigatórios no formulário de importação do XML.
-  - O botão `[ Importar ]` permanece bloqueado caso a categoria seja "Sem categoria" ou nenhum contato esteja vinculado, impedindo que lançamentos fiquem órfãos ou sem dono no financeiro.
-  - Auto-sugestão inteligente: pré-seleciona a categoria mais comum com base no tipo de operação (ex: "Fornecedores" ou "Peças" para Conta a Pagar; "Vendas de Produtos" ou "Serviços" para Conta a Receber).
+  - `Categoria padrão *` e `Vincular contato *` marcados com asterisco vermelho e bloqueio estrito do botão `[ Importar ]` até ambos estarem preenchidos, impedindo lançamentos sem dono no financeiro.
+  - Auto-sugestão inteligente (`suggestXmlCategoryId`): pré-seleciona a categoria mais comum com base no tipo de operação (Fornecedores/Peças para Conta a Pagar; Vendas de Produtos/Serviços para Conta a Receber).
 - **Solução A — Parcelamento Flexível no Importador de XML (Pré-Lançamento):**
   - Adição do botão `[ + Adicionar Parcela ]` e do seletor rápido `[ 쪼 Parcelar em 2x, 3x, 4x, 6x ]` na tabela de duplicatas do XML.
   - Permite desdobrar o valor da nota fiscal em múltiplas parcelas antes de importar (ex: nota à vista de R$ 1.300,00 dividida em R$ 600 de entrada + R$ 700 em 30 dias), rateando centavos com precisão e evitando falsas divergências de desconto/abatimento.
+  - Botão `[ ✕ ]` para excluir parcelas avulsas adicionadas manualmente.
 - **Solução B — Baixa Parcial com Desdobro de Saldo Devedor (Pós-Lançamento no Caixa):**
-  - No modal de liquidação/baixa (`handleConfirmSettle`), permitir digitar um valor pago menor que o saldo devedor.
-  - Ao confirmar com valor menor: quita o valor recebido/pago no caixa do dia e cria automaticamente a parcela de saldo remanescente pendente vinculada ao mesmo contrato (`installmentGroupId`), com vencimento ajustável.
+  - No modal de liquidação/baixa (`SettleModal.tsx`), ao digitar um valor recebido/pago menor que o total, exibe a opção marcada por padrão de Baixa Parcial com desdobro de saldo.
+  - Quita o valor recebido/pago no caixa do dia e cria automaticamente a parcela de saldo remanescente pendente vinculada ao mesmo contrato (`installmentGroupId`), com vencimento ajustável.
 - **Propagação Inteligente de Categoria e Contato nas Parcelas:**
   - No modal de edição (`TransactionModal.tsx`), quando um lançamento possui `installmentGroupId` e o usuário alterar a Categoria ou o Contato:
-  - Exibir opção (marcada como SIM por padrão): `☑ Replicar nova Categoria e Contato para todas as parcelas pendentes deste parcelamento ({current}/{total})`.
+  - Checkbox marcado por padrão: `☑ Replicar nova Categoria e Contato para todas as parcelas deste parcelamento ({current}/{total})`.
   - Atualização em lote de todas as parcelas irmãs do mesmo contrato.
 - **Recibo Comercial em 2 Vias por Folha A4 com Picote + Recibo em Branco Avulso:**
   - Layout compacto de 2 vias (1ª Via: Cliente / 2ª Via: Empresa) em uma única folha A4 com linha pontilhada de corte (`✂ - - - -`), sem dados internos de sistema/auditoria.
-  - Botão utilitário para gerar folha de **Recibo em Branco Pautado** com logotipo e cabeçalho oficial da empresa para preenchimento manual no balcão.
+  - Botão `[ 📄 Recibo em Branco ]` tanto na consulta de lançamento quanto na tela de Relatórios para gerar folha A4 com 2 vias pautadas com logotipo oficial para preenchimento manual no balcão.
+- **Validação:** 126 testes passando no Vitest (100% verde em 16 arquivos), 0 erros de TypeScript (`npm run lint`).
 
 ### 📋 Etapa 11.2: Modularização das Telas Restantes
 Decomposição arquitetural para modularizar e reduzir para menos de 250 linhas os componentes remanescentes:
