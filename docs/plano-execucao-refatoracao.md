@@ -23,7 +23,7 @@ Transformar o **FluxoClaro** em um sistema financeiro modular, de fácil manuten
 [✅ Fase 8: Excel Modular]    -> Importação Excel com Drag-and-Drop nativo e Decomposição (< 200 linhas)
 [✅ Fase 9: Multi-Empresas]   -> Concluída com Sucesso (9.1, 9.2 e 9.3: Entidades, RBAC, CNPJ Alfanumérico, Trava Anti-Fraude e Modais)
 [✅ Fase 10: Central & Licença]-> Concluída com Sucesso (10.1 Central de Atualizações e Auto-Update; 10.2 Sistema de Licenciamento e Liberação)
-[⏳ Fase 11: XML & Telas]     -> 11.1 Evolução do XML (Lote, Validação e Edição); 11.2 Modularização das Telas Restantes
+[✅ Fase 11: XML & Telas]     -> Concluída com Sucesso (11.1 Evolução do XML, Baixas e Recibo 2 Vias; 11.2 Modularização das Telas Restantes)
 [📋 Fase 12: Auditoria UI]    -> Pente fino de padronização em 100% dos botões, inputs, pills e drawers
 ```
 
@@ -326,12 +326,31 @@ Implementar governança de versões, eliminação de problemas de cache do PWA n
   - Botão `[ 📄 Recibo em Branco ]` tanto na consulta de lançamento quanto na tela de Relatórios para gerar folha A4 com 2 vias pautadas com logotipo oficial para preenchimento manual no balcão.
 - **Validação:** 126 testes passando no Vitest (100% verde em 16 arquivos), 0 erros de TypeScript (`npm run lint`).
 
-### 📋 Etapa 11.2: Modularização das Telas Restantes
-Decomposição arquitetural para modularizar e reduzir para menos de 250 linhas os componentes remanescentes:
-- `ContactsView.tsx` (567 linhas) e `ContactDrawer.tsx` (559 linhas) -> `src/components/contacts/`
-- `SettingsView.tsx` (809 linhas) -> `src/components/settings/`
-- `ReportsView.tsx` (530 linhas) -> `src/components/reports/`
-- `InstallmentManagerModal.tsx` (700 linhas) -> `src/components/installment-manager/`
+### ✅ Etapa 11.2: Concluída com Sucesso (Modularização das Telas Restantes)
+Decomposição arquitetural para modularizar e reduzir para menos de 200 linhas os componentes remanescentes, mantendo re-exports em `src/components/` com zero quebra:
+- **Módulo de Contatos (`src/components/contacts/`):**
+  - `ContactsView.tsx` (140 linhas), `ContactFilters.tsx` (119 linhas), `ContactTable.tsx` (62 linhas), `ContactCardList.tsx` (160 linhas).
+  - `ContactDrawer.tsx` (157 linhas), `ContactFormGeneral.tsx` (170 linhas), `ContactFormAddress.tsx` (132 linhas), `ContactFormActions.tsx` (84 linhas).
+  - Hooks e utilitários: `useContactForm.ts`, `useContactLookups.ts`, `ContactDrawerHeader.tsx`, `ContactDuplicateWarning.tsx`, `ContactKindSelector.tsx`.
+- **Módulo de Configurações (`src/components/settings/`):**
+  - `SettingsView.tsx` (160 linhas, com navegação de abas semântica e acessível `role="tablist"`).
+  - `CategoriesSettingsTab.tsx` (92 linhas), `CategoryAddForm.tsx` (114 linhas), `CategoryFilters.tsx` (92 linhas), `CategoryRow.tsx` (179 linhas).
+  - `BackupSettingsTab.tsx` (120 linhas).
+  - `PreferencesSettingsTab.tsx` (60 linhas), `NotificationsSection.tsx` (186 linhas), `AppearanceAccountSection.tsx` (123 linhas), `RolePermissionsCard.tsx` (24 linhas), `settingsConstants.ts`.
+- **Módulo de Relatórios Financeiros (`src/components/reports/`):**
+  - `ReportsView.tsx` (95 linhas).
+  - `ReportFiltersBar.tsx` (166 linhas).
+  - `ReportExecutiveKpis.tsx` (64 linhas).
+  - `ReportCategoryBreakdown.tsx` (127 linhas).
+  - `ReportActionsBar.tsx` (88 linhas).
+  - Auxiliares: `useReportFilters.ts` (187 linhas) e `reportSummary.ts` (32 linhas).
+- **Módulo do Gerenciador de Parcelamentos (`src/components/installment-manager/`):**
+  - `InstallmentManagerModal.tsx` (76 linhas).
+  - `InstallmentHeaderCard.tsx` (61 linhas).
+  - `InstallmentSplitScenarioA.tsx` (177 linhas).
+  - `InstallmentRenegotiateScenarioB.tsx` (187 linhas).
+  - Auxiliares: `InstallmentDateField.tsx`, `InstallmentOriginalSummary.tsx`, `InstallmentPreviewRows.tsx`, `InstallmentScheduleList.tsx`, `InstallmentSettledNotice.tsx`, `InstallmentSplitPreview.tsx`, `useInstallmentCount.ts`.
+- **Validação:** 126 testes passando no Vitest (100% verde em 16 arquivos), 0 erros de TypeScript (`npm run lint`).
 
 ---
 
